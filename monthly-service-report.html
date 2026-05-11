@@ -532,49 +532,25 @@
   }
   .sync-btn:hover { background: rgba(200,85,61,0.08); }
 
-  /* Auto-computed value badge under each stat field */
-  .stat-cell {
-    position: relative;
+  /* Read-only auto-computed stat displays */
+  .stat-cell.stat-readonly {
+    background: var(--paper);
+    border: 1px solid var(--soft-line);
+    cursor: default;
   }
-  .stat-auto {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    margin-top: 6px;
-    font-size: 11px;
-    color: var(--muted);
-    line-height: 1.3;
-  }
-  .stat-auto .computed-val {
-    font-family: 'JetBrains Mono', monospace;
+  .stat-value-display {
+    font-family: 'Fraunces', Georgia, serif;
     font-weight: 600;
-    color: var(--ink-soft);
-    background: var(--cream);
-    padding: 1px 6px;
-    border-radius: 3px;
+    font-size: 28px;
+    line-height: 1.1;
+    color: var(--navy);
+    margin-top: 4px;
+    letter-spacing: -0.01em;
+    transition: color 0.4s ease;
   }
-  .stat-auto.matches .computed-val {
-    color: var(--green);
-    background: rgba(31, 122, 77, 0.08);
-  }
-  .stat-auto.differs .computed-val {
+  .stat-value-display.flash {
     color: var(--accent);
-    background: rgba(200,85,61,0.08);
   }
-  .stat-auto button {
-    background: transparent;
-    border: none;
-    color: var(--accent);
-    font-size: 11px;
-    font-weight: 600;
-    cursor: pointer;
-    padding: 0;
-    text-decoration: underline;
-    font-family: inherit;
-  }
-  .stat-auto button:hover { color: #b54a35; }
-  .stat-auto.matches button,
-  .stat-auto.unset    button { display: none; }
 
   .trip-toolbar {
     display: flex;
@@ -1450,6 +1426,24 @@
       payrollOnlyEmployees: String(payrollEmployees),
     };
   }
+
+  // Live-refresh the read-only Period at a Glance boxes if the Cover & Stats
+  // view is currently mounted. Cheap, called from save() on every edit.
+  function refreshCoverStatsDisplay() {
+    const grid = document.getElementById('coverStatsGrid');
+    if (!grid) return; // not on the meta view, nothing to do
+    const auto = computeCoverStats();
+    grid.querySelectorAll('[data-cover-stat]').forEach(el => {
+      const k = el.dataset.coverStat;
+      const newVal = auto[k] || '0';
+      if (el.textContent !== newVal) {
+        el.textContent = newVal;
+        // Brief colour flash so the user sees what just changed
+        el.classList.add('flash');
+        setTimeout(() => el.classList.remove('flash'), 600);
+      }
+    });
+  }
   let state;
   let currentView = { type: 'meta', clientIdx: 0 };
 
@@ -1667,6 +1661,8 @@
   let saveSeq = 0;
   function save() {
     setSaveStatus('saving');
+    // Live-update the Period at a Glance boxes immediately (cheap & local)
+    try { refreshCoverStatsDisplay(); } catch (e) { /* not on meta view */ }
     clearTimeout(saveTimer);
     const seq = ++saveSeq;
     // Stamp the moment of edit (drives last-write-wins for Drive sync)
@@ -2484,48 +2480,33 @@
       <div class="card">
         <div class="card-header">
           <div class="card-title">Period at a Glance</div>
-          <div class="card-subtitle">Summary stats — shown in the cover page boxes</div>
-          <button class="sync-btn" id="syncCoverStatsBtn" title="Auto-fill all 8 boxes from your clients, visits, head counts and journey log. Empty boxes get filled; non-empty boxes only change if they differ.">Sync all from data ↻</button>
+          <div class="card-subtitle">Auto-computed from your data — updates live as you add information</div>
         </div>
-        <div class="stats-grid">
+        <div class="stats-grid" id="coverStatsGrid">
           ${(() => {
             const auto = computeCoverStats();
             const fields = [
-              ['clientsAssisted', 'Clients Assisted'],
-              ['clientVisits', 'Client Visits'],
-              ['kilometres', 'Distance Travelled'],
-              ['outsourcedClients', 'Outsourced Clients'],
-              ['payrollOnlyClients', 'Payroll-Only Clients'],
-              ['otherClients', 'Other Clients'],
-              ['outsourcedEmployees', 'Outsourced Employees'],
+              ['clientsAssisted',      'Clients Assisted'],
+              ['clientVisits',         'Client Visits'],
+              ['kilometres',           'Distance Travelled'],
+              ['outsourcedClients',    'Outsourced Clients'],
+              ['payrollOnlyClients',   'Payroll-Only Clients'],
+              ['otherClients',         'Other Clients'],
+              ['outsourcedEmployees',  'Outsourced Employees'],
               ['payrollOnlyEmployees', 'Payroll-Only Employees'],
             ];
-            return fields.map(([k, lbl]) => {
-              const current  = (m.stats[k] || '').toString().trim();
-              const computed = (auto[k]    || '').toString().trim();
-              let cls = 'unset';
-              if (current && current === computed) cls = 'matches';
-              else if (current && current !== computed) cls = 'differs';
-              else if (!current && computed && computed !== '0' && computed !== '0 km') cls = 'unset';
-              return `
-                <div class="stat-cell">
-                  <label>${lbl}</label>
-                  <input type="text" data-stat="${k}" value="${escapeHtml(m.stats[k])}" />
-                  <div class="stat-auto ${cls}">
-                    <span>auto:</span>
-                    <span class="computed-val">${escapeHtml(computed || '—')}</span>
-                    ${cls === 'differs' ? `<button type="button" data-apply-auto="${k}" title="Replace with auto value">use</button>` : ''}
-                    ${cls === 'unset' && computed && computed !== '0' && computed !== '0 km' ? `<button type="button" data-apply-auto="${k}">fill</button>` : ''}
-                  </div>
-                </div>
-              `;
-            }).join('');
+            return fields.map(([k, lbl]) => `
+              <div class="stat-cell stat-readonly">
+                <label>${lbl}</label>
+                <div class="stat-value-display" data-cover-stat="${k}">${escapeHtml(auto[k] || '0')}</div>
+              </div>
+            `).join('');
           })()}
         </div>
         <p class="input-help" style="margin-top: 12px;">
-          Tip: these are entered as text so you can write "2,556 km" or "≈ 17". They appear exactly as written in the report.
-          The <em>auto</em> badge under each box shows what would be filled in if you click <strong>Sync all from data</strong>.
-          To make the Outsourced / Payroll-Only / Employees boxes auto-fill, set each client's <strong>Type</strong> field on its profile page.
+          These values update automatically as you log visits, trips, CCMA / bargaining council attendances, and add or edit clients.
+          To make <strong>Outsourced</strong> / <strong>Payroll-Only</strong> / <strong>Employees</strong> counts work,
+          set each client's <strong>Type</strong> field on its profile page.
         </p>
       </div>
 
@@ -2763,71 +2744,8 @@
         save();
       });
     });
-    document.querySelectorAll('[data-stat]').forEach(el => {
-      el.addEventListener('input', e => {
-        state.meta.stats[e.target.dataset.stat] = e.target.value;
-        save();
-      });
-    });
-
-    // Sync all — fill every box from auto-computed values.
-    // Empty boxes always get filled. Non-empty boxes only get overwritten
-    // after a confirmation, since the user may have hand-typed a value.
-    const syncAllBtn = document.getElementById('syncCoverStatsBtn');
-    if (syncAllBtn) {
-      syncAllBtn.addEventListener('click', async () => {
-        const auto = computeCoverStats();
-        const stats = state.meta.stats;
-        const willOverwrite = [];
-        const willFill = [];
-        for (const k of Object.keys(auto)) {
-          const cur = (stats[k] || '').toString().trim();
-          const val = auto[k];
-          if (!val || val === '0' || val === '0 km') continue; // skip zero values
-          if (!cur) willFill.push(k);
-          else if (cur !== val) willOverwrite.push(k);
-        }
-        if (willFill.length === 0 && willOverwrite.length === 0) {
-          toast('All boxes already match the computed values');
-          return;
-        }
-        let proceed = true;
-        if (willOverwrite.length > 0) {
-          proceed = await confirmDialog(
-            'Overwrite manually-typed values?',
-            `${willFill.length} empty box${willFill.length === 1 ? '' : 'es'} will be filled. ${willOverwrite.length} box${willOverwrite.length === 1 ? '' : 'es'} you typed values into will be replaced with auto-computed values. Continue?`
-          );
-        }
-        if (!proceed) {
-          // Fill only the empty ones — safe partial sync
-          if (willFill.length > 0) {
-            for (const k of willFill) stats[k] = auto[k];
-            save();
-            renderContent();
-            toast(`Filled ${willFill.length} empty box${willFill.length === 1 ? '' : 'es'}`);
-          }
-          return;
-        }
-        for (const k of [...willFill, ...willOverwrite]) stats[k] = auto[k];
-        save();
-        renderContent();
-        toast(`Synced ${willFill.length + willOverwrite.length} box${willFill.length + willOverwrite.length === 1 ? '' : 'es'} from your data`);
-      });
-    }
-
-    // Per-box "fill" / "use" buttons — apply a single auto value
-    document.querySelectorAll('[data-apply-auto]').forEach(btn => {
-      btn.addEventListener('click', () => {
-        const k = btn.dataset.applyAuto;
-        const auto = computeCoverStats();
-        if (auto[k] != null) {
-          state.meta.stats[k] = auto[k];
-          save();
-          renderContent();
-          toast(`${k} set to ${auto[k]}`);
-        }
-      });
-    });
+    // Note: Period at a Glance boxes are read-only auto-displays now —
+    // they refresh automatically via refreshCoverStatsDisplay() in save().
   }
 
   function renderClientView(cli, idx) {
@@ -3151,7 +3069,6 @@
         <div class="card-header">
           <div class="card-title">Period Totals</div>
           <div class="card-subtitle">${filter.client ? `Filtered: ${escapeHtml(filter.client)}` : 'All trips this month'}</div>
-          ${filter.client ? '' : `<button class="sync-btn" id="syncStatsBtn" title="Update the Cover & Stats kilometre total with the combined total of all trips, CCMA attendances, and bargaining council attendances">Sync ALL journeys to cover stat</button>`}
         </div>
         <div class="trip-summary">
           <div class="stat-cell">
@@ -3344,17 +3261,6 @@
             if (dateInput) { dateInput.focus(); dateInput.select(); }
           }
         }, 0);
-      });
-    }
-
-    const syncBtn = document.getElementById('syncStatsBtn');
-    if (syncBtn) {
-      syncBtn.addEventListener('click', () => {
-        const totals = tripTotals(allJourneys());
-        const formatted = totals.km.toLocaleString('en-ZA', { maximumFractionDigits: 0 }) + ' km';
-        state.meta.stats.kilometres = formatted;
-        save();
-        toast(`Cover stat updated to ${formatted} (trips + CCMA + bargaining council)`);
       });
     }
   }
@@ -3794,7 +3700,8 @@
       ],
     });
 
-    const s = m.stats;
+    // Always use live-computed cover stats so the DOCX reflects current data
+    const s = computeCoverStats();
     const statsRow1 = new Table({
       width: { size: 9360, type: WidthType.DXA },
       columnWidths: [3120, 3120, 3120],
