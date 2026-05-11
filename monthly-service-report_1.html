@@ -1005,7 +1005,7 @@
 
   .activity-stats {
     display: grid;
-    grid-template-columns: repeat(4, 1fr);
+    grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
     gap: 12px;
     margin-bottom: 22px;
   }
@@ -1355,11 +1355,26 @@
     // Initialise from main clients (so all show even with zero activity)
     for (const c of state.clients) {
       if (!c.name) continue;
-      stats[c.name] = { name: c.name, visits: (c.visits || []).length, journeys: 0, km: 0, mins: 0, isMain: true };
+      stats[c.name] = { name: c.name, visits: (c.visits || []).length, ccma: 0, bc: 0, journeys: 0, km: 0, mins: 0, isMain: true };
     }
     // Other clients (only included if they have activity)
     for (const o of (state.otherClients || [])) {
-      if (o.client && !stats[o.client]) stats[o.client] = { name: o.client, visits: 0, journeys: 0, km: 0, mins: 0, isMain: false };
+      if (o.client && !stats[o.client]) stats[o.client] = { name: o.client, visits: 0, ccma: 0, bc: 0, journeys: 0, km: 0, mins: 0, isMain: false };
+    }
+
+    // Count CCMA appearances per client (one per entry, regardless of venue)
+    for (const e of allCcmaEntries()) {
+      const name = (e.client || '').trim();
+      if (!name) continue;
+      if (!stats[name]) stats[name] = { name, visits: 0, ccma: 0, bc: 0, journeys: 0, km: 0, mins: 0, isMain: false };
+      stats[name].ccma++;
+    }
+    // Count Bargaining Council attendances per client
+    for (const e of allBargainingEntries()) {
+      const name = (e.client || '').trim();
+      if (!name) continue;
+      if (!stats[name]) stats[name] = { name, visits: 0, ccma: 0, bc: 0, journeys: 0, km: 0, mins: 0, isMain: false };
+      stats[name].bc++;
     }
 
     let nonClientKm = 0, nonClientMins = 0, nonClientCount = 0;
@@ -1369,7 +1384,7 @@
       const dur = (typeof tripDuration === 'function') ? tripDuration(j) : null;
       const mins = (dur === null) ? 0 : dur;
       if (name && knownClientNames.has(name)) {
-        if (!stats[name]) stats[name] = { name, visits: 0, journeys: 0, km: 0, mins: 0, isMain: false };
+        if (!stats[name]) stats[name] = { name, visits: 0, ccma: 0, bc: 0, journeys: 0, km: 0, mins: 0, isMain: false };
         stats[name].journeys++;
         stats[name].km += km;
         stats[name].mins += mins;
@@ -1381,15 +1396,17 @@
     }
 
     const list = Object.values(stats)
-      .filter(s => s.visits > 0 || s.journeys > 0)
+      .filter(s => s.visits > 0 || s.ccma > 0 || s.bc > 0 || s.journeys > 0)
       .sort((a, b) => a.name.localeCompare(b.name));
 
     const totals = list.reduce((acc, s) => ({
       visits: acc.visits + s.visits,
+      ccma: acc.ccma + s.ccma,
+      bc: acc.bc + s.bc,
       journeys: acc.journeys + s.journeys,
       km: acc.km + s.km,
       mins: acc.mins + s.mins,
-    }), { visits: 0, journeys: 0, km: 0, mins: 0 });
+    }), { visits: 0, ccma: 0, bc: 0, journeys: 0, km: 0, mins: 0 });
 
     return { perClient: list, nonClient: { km: nonClientKm, mins: nonClientMins, journeys: nonClientCount }, totals };
   }
@@ -1413,19 +1430,42 @@
     const payroll    = clients.filter(c => c.type === 'payroll');
     const otherTyped = clients.filter(c => c.type === 'other');
 
-    // Total visits across all main clients
-    const clientVisits = clients.reduce((acc, c) => acc + ((c.visits || []).length), 0);
+    // CCMA and Bargaining Council totals — every entry counts as one appearance
+    const ccmaEntries = allCcmaEntries();
+    const bcEntries   = allBargainingEntries();
+    const ccmaCount   = ccmaEntries.length;
+    const bcCount     = bcEntries.length;
+
+    // Total physical visits across all main clients
+    const physicalVisits = clients.reduce((acc, c) => acc + ((c.visits || []).length), 0);
+
+    // Client Visits box = physical visits + CCMA appearances + BC appearances
+    // (this is total client contact — each CCMA / BC matter is a contact event)
+    const clientVisits = physicalVisits + ccmaCount + bcCount;
 
     // Combined kilometres: Trip Log + CCMA journeys + Bargaining Council journeys
     const totals = tripTotals(allJourneys());
     const km = totals.km;
 
-    // Clients Assisted: clients with at least one visit + unique other-client names
-    const visitedClients = clients.filter(c => (c.visits || []).length > 0).length;
-    const uniqOther = new Set(otherCli.map(o => (o.client || '').trim()).filter(Boolean));
-    const clientsAssisted = visitedClients + uniqOther.size;
+    // Clients Assisted: any client who had ANY contact — physical visit, CCMA,
+    // BC, or appears under "Other Clients Assisted". Counted once each.
+    const assistedNames = new Set();
+    for (const c of clients) {
+      if (c.name && (c.visits || []).length > 0) assistedNames.add(c.name.toLowerCase());
+    }
+    for (const e of ccmaEntries) {
+      if (e.client) assistedNames.add(e.client.trim().toLowerCase());
+    }
+    for (const e of bcEntries) {
+      if (e.client) assistedNames.add(e.client.trim().toLowerCase());
+    }
+    for (const o of otherCli) {
+      if (o.client) assistedNames.add(o.client.trim().toLowerCase());
+    }
+    const clientsAssisted = assistedNames.size;
 
     // Other Clients count: separate "Other Clients Assisted" entries + clients typed as 'other'
+    const uniqOther = new Set(otherCli.map(o => (o.client || '').trim().toLowerCase()).filter(Boolean));
     const otherClientsTotal = uniqOther.size + otherTyped.length;
 
     // Employee head counts by type (sum the leading number from each client's headCount field)
@@ -1436,6 +1476,8 @@
       clientsAssisted:      String(clientsAssisted),
       clientVisits:         String(clientVisits),
       kilometres:           km.toLocaleString('en-ZA', { maximumFractionDigits: 0 }) + ' km',
+      ccmaAppearances:      String(ccmaCount),
+      bcAppearances:        String(bcCount),
       outsourcedClients:    String(outsourced.length),
       payrollOnlyClients:   String(payroll.length),
       otherClients:         String(otherClientsTotal),
@@ -2549,6 +2591,8 @@
             const fields = [
               ['clientsAssisted',      'Clients Assisted'],
               ['clientVisits',         'Client Visits'],
+              ['ccmaAppearances',      'CCMA Appearances'],
+              ['bcAppearances',        'BC Appearances'],
               ['kilometres',           'Distance Travelled'],
               ['outsourcedClients',    'Outsourced Clients'],
               ['payrollOnlyClients',   'Payroll-Only Clients'],
@@ -2566,6 +2610,7 @@
         </div>
         <p class="input-help" style="margin-top: 12px;">
           These values update automatically as you log visits, trips, CCMA / bargaining council attendances, and add or edit clients.
+          <strong>Client Visits</strong> includes physical visits, CCMA appearances, and BC appearances combined.
           To make <strong>Outsourced</strong> / <strong>Payroll-Only</strong> / <strong>Employees</strong> counts work,
           set each client's <strong>Type</strong> field on its profile page.
         </p>
@@ -2591,6 +2636,8 @@
               <tr>
                 <th>Client</th>
                 <th class="center">Visits</th>
+                <th class="center">CCMA</th>
+                <th class="center">BC</th>
                 <th class="center">Journeys</th>
                 <th class="num">Total KM</th>
                 <th class="center">Total Time</th>
@@ -2601,6 +2648,8 @@
                 <tr>
                   <td class="client-name">${escapeHtml(s.name)}</td>
                   <td class="center">${s.visits || '<span class="empty-cell">—</span>'}</td>
+                  <td class="center">${(s.ccma || 0) || '<span class="empty-cell">—</span>'}</td>
+                  <td class="center">${(s.bc || 0) || '<span class="empty-cell">—</span>'}</td>
                   <td class="center">${s.journeys || '<span class="empty-cell">—</span>'}</td>
                   <td class="num">${s.km > 0 ? s.km.toLocaleString('en-ZA', { maximumFractionDigits: 1 }) : '<span class="empty-cell">—</span>'}</td>
                   <td class="center">${s.mins > 0 ? fmtDuration(s.mins) : '<span class="empty-cell">—</span>'}</td>
@@ -2609,6 +2658,8 @@
               ${stats.nonClient.journeys > 0 ? `
                 <tr>
                   <td class="client-name" style="color: var(--muted); font-style: italic;">Non-client journeys</td>
+                  <td class="center"><span class="empty-cell">—</span></td>
+                  <td class="center"><span class="empty-cell">—</span></td>
                   <td class="center"><span class="empty-cell">—</span></td>
                   <td class="center">${stats.nonClient.journeys}</td>
                   <td class="num">${stats.nonClient.km.toLocaleString('en-ZA', { maximumFractionDigits: 1 })}</td>
@@ -2620,6 +2671,8 @@
               <tr>
                 <th>Total</th>
                 <td class="center">${stats.totals.visits}</td>
+                <td class="center">${stats.totals.ccma}</td>
+                <td class="center">${stats.totals.bc}</td>
                 <td class="center">${stats.totals.journeys + stats.nonClient.journeys}</td>
                 <td class="num">${(stats.totals.km + stats.nonClient.km).toLocaleString('en-ZA', { maximumFractionDigits: 1 })}</td>
                 <td class="center">${fmtDuration(stats.totals.mins + stats.nonClient.mins)}</td>
@@ -2682,7 +2735,10 @@
     const grandKm = stats.totals.km + stats.nonClient.km;
     const grandMins = stats.totals.mins + stats.nonClient.mins;
     const grandVisits = stats.totals.visits;
+    const grandCcma = stats.totals.ccma;
+    const grandBc = stats.totals.bc;
     const grandJourneys = stats.totals.journeys + stats.nonClient.journeys;
+    const grandTotal = grandVisits + grandCcma + grandBc;
 
     return `
       <div class="help-banner">
@@ -2699,7 +2755,22 @@
         <div class="activity-stat">
           <div class="label">Total Time</div>
           <div class="value">${fmtDuration(grandMins) || '—'}</div>
-          <div class="sub">${grandVisits} client visit${grandVisits === 1 ? '' : 's'}</div>
+          <div class="sub">${grandTotal} total contact${grandTotal === 1 ? '' : 's'}</div>
+        </div>
+        <div class="activity-stat">
+          <div class="label">Physical Visits</div>
+          <div class="value">${grandVisits}</div>
+          <div class="sub">on-site client visits</div>
+        </div>
+        <div class="activity-stat">
+          <div class="label">CCMA Appearances</div>
+          <div class="value">${grandCcma}</div>
+          <div class="sub">across all venues</div>
+        </div>
+        <div class="activity-stat">
+          <div class="label">BC Appearances</div>
+          <div class="value">${grandBc}</div>
+          <div class="sub">across all venues</div>
         </div>
         <div class="activity-stat">
           <div class="label">Most KM</div>
@@ -2727,6 +2798,8 @@
               <tr>
                 <th data-sort="name" class="${cls('name')}">Client ${sortArrow('name')}</th>
                 <th data-sort="visits" class="center ${cls('visits')}" style="text-align:center;">Visits ${sortArrow('visits')}</th>
+                <th data-sort="ccma" class="center ${cls('ccma')}" style="text-align:center;">CCMA ${sortArrow('ccma')}</th>
+                <th data-sort="bc" class="center ${cls('bc')}" style="text-align:center;">BC ${sortArrow('bc')}</th>
                 <th data-sort="journeys" class="center ${cls('journeys')}" style="text-align:center;">Journeys ${sortArrow('journeys')}</th>
                 <th data-sort="km" class="num ${cls('km')}" style="text-align:right;">Total KM ${sortArrow('km')}</th>
                 <th data-sort="mins" class="center ${cls('mins')}" style="text-align:center;">Total Time ${sortArrow('mins')}</th>
@@ -2745,6 +2818,14 @@
                     <td class="center ${isBarCol('visits') ? 'bar-cell' : ''}">
                       ${isBarCol('visits') ? `<span class="bar-fill" style="width:${pct}%"></span>` : ''}
                       ${s.visits > 0 ? s.visits : '<span class="empty-cell">—</span>'}
+                    </td>
+                    <td class="center ${isBarCol('ccma') ? 'bar-cell' : ''}">
+                      ${isBarCol('ccma') ? `<span class="bar-fill" style="width:${pct}%"></span>` : ''}
+                      ${(s.ccma || 0) > 0 ? s.ccma : '<span class="empty-cell">—</span>'}
+                    </td>
+                    <td class="center ${isBarCol('bc') ? 'bar-cell' : ''}">
+                      ${isBarCol('bc') ? `<span class="bar-fill" style="width:${pct}%"></span>` : ''}
+                      ${(s.bc || 0) > 0 ? s.bc : '<span class="empty-cell">—</span>'}
                     </td>
                     <td class="center ${isBarCol('journeys') ? 'bar-cell' : ''}">
                       ${isBarCol('journeys') ? `<span class="bar-fill" style="width:${pct}%"></span>` : ''}
@@ -2766,6 +2847,8 @@
               <tr>
                 <th>Total</th>
                 <td class="center">${grandVisits}</td>
+                <td class="center">${grandCcma}</td>
+                <td class="center">${grandBc}</td>
                 <td class="center">${grandJourneys}</td>
                 <td class="num">${grandKm.toLocaleString('en-ZA', { maximumFractionDigits: 1 })}</td>
                 <td class="center">${fmtDuration(grandMins)}</td>
@@ -3772,6 +3855,14 @@
         statCell(s.kilometres, "DISTANCE TRAVELLED", ROW_ALT),
       ]})],
     });
+    const statsRowCcmaBc = new Table({
+      width: { size: 9360, type: WidthType.DXA },
+      columnWidths: [4680, 4680],
+      rows: [new TableRow({ children: [
+        statCell(s.ccmaAppearances, "CCMA APPEARANCES", "FFFFFF"),
+        statCell(s.bcAppearances,   "BARGAINING COUNCIL APPEARANCES", ROW_ALT),
+      ]})],
+    });
     const statsRow2 = new Table({
       width: { size: 9360, type: WidthType.DXA },
       columnWidths: [3120, 3120, 3120],
@@ -4000,6 +4091,7 @@
       spacer(180),
       sectionHeading("Period at a Glance"),
       statsRow1, spacer(100),
+      statsRowCcmaBc, spacer(100),
       statsRow2, spacer(100),
       statsRow3,
       sectionHeading("Client Index"),
@@ -4199,16 +4291,18 @@
 
       const summaryTable = new Table({
         width: { size: 9360, type: WidthType.DXA },
-        columnWidths: [3300, 1100, 1300, 1500, 2160],
+        columnWidths: [2700, 900, 900, 900, 1100, 1300, 1560],
         rows: [
           new TableRow({
             tableHeader: true,
             children: [
-              headerCell("Client", 3300),
-              headerCell("Visits", 1100),
-              headerCell("Journeys", 1300),
-              headerCell("Total KM", 1500),
-              headerCell("Total Time", 2160),
+              headerCell("Client", 2700),
+              headerCell("Visits", 900),
+              headerCell("CCMA", 900),
+              headerCell("BC", 900),
+              headerCell("Journeys", 1100),
+              headerCell("Total KM", 1300),
+              headerCell("Total Time", 1560),
             ],
           }),
           ...rows.map((s, i) => {
@@ -4216,33 +4310,39 @@
             return new TableRow({
               cantSplit: true,
               children: [
-                bodyCell(s.name, 3300, { fill, bold: true, color: NAVY, valign: VerticalAlign.TOP }),
-                bodyCell(s.visits ? String(s.visits) : "—", 1100, { fill, align: AlignmentType.CENTER, valign: VerticalAlign.TOP }),
-                bodyCell(s.journeys ? String(s.journeys) : "—", 1300, { fill, align: AlignmentType.CENTER, valign: VerticalAlign.TOP }),
-                bodyCell(s.km > 0 ? s.km.toLocaleString('en-ZA', { maximumFractionDigits: 1 }) : "—", 1500, { fill, align: AlignmentType.RIGHT, valign: VerticalAlign.TOP, bold: s.km > 0 }),
-                bodyCell(s.mins > 0 ? fmtDuration(s.mins) : "—", 2160, { fill, align: AlignmentType.CENTER, valign: VerticalAlign.TOP }),
+                bodyCell(s.name, 2700, { fill, bold: true, color: NAVY, valign: VerticalAlign.TOP }),
+                bodyCell(s.visits ? String(s.visits) : "—", 900, { fill, align: AlignmentType.CENTER, valign: VerticalAlign.TOP }),
+                bodyCell((s.ccma || 0) ? String(s.ccma) : "—", 900, { fill, align: AlignmentType.CENTER, valign: VerticalAlign.TOP }),
+                bodyCell((s.bc || 0) ? String(s.bc) : "—", 900, { fill, align: AlignmentType.CENTER, valign: VerticalAlign.TOP }),
+                bodyCell(s.journeys ? String(s.journeys) : "—", 1100, { fill, align: AlignmentType.CENTER, valign: VerticalAlign.TOP }),
+                bodyCell(s.km > 0 ? s.km.toLocaleString('en-ZA', { maximumFractionDigits: 1 }) : "—", 1300, { fill, align: AlignmentType.RIGHT, valign: VerticalAlign.TOP, bold: s.km > 0 }),
+                bodyCell(s.mins > 0 ? fmtDuration(s.mins) : "—", 1560, { fill, align: AlignmentType.CENTER, valign: VerticalAlign.TOP }),
               ],
             });
           }),
           ...(nc.journeys > 0 ? [new TableRow({
             cantSplit: true,
             children: [
-              bodyCell("Non-client journeys", 3300, { fill: rows.length % 2 ? ROW_ALT : undefined, italic: true, color: MUTED, valign: VerticalAlign.TOP }),
-              bodyCell("—", 1100, { fill: rows.length % 2 ? ROW_ALT : undefined, align: AlignmentType.CENTER }),
-              bodyCell(String(nc.journeys), 1300, { fill: rows.length % 2 ? ROW_ALT : undefined, align: AlignmentType.CENTER }),
-              bodyCell(nc.km.toLocaleString('en-ZA', { maximumFractionDigits: 1 }), 1500, { fill: rows.length % 2 ? ROW_ALT : undefined, align: AlignmentType.RIGHT, bold: true }),
-              bodyCell(nc.mins > 0 ? fmtDuration(nc.mins) : "—", 2160, { fill: rows.length % 2 ? ROW_ALT : undefined, align: AlignmentType.CENTER }),
+              bodyCell("Non-client journeys", 2700, { fill: rows.length % 2 ? ROW_ALT : undefined, italic: true, color: MUTED, valign: VerticalAlign.TOP }),
+              bodyCell("—", 900, { fill: rows.length % 2 ? ROW_ALT : undefined, align: AlignmentType.CENTER }),
+              bodyCell("—", 900, { fill: rows.length % 2 ? ROW_ALT : undefined, align: AlignmentType.CENTER }),
+              bodyCell("—", 900, { fill: rows.length % 2 ? ROW_ALT : undefined, align: AlignmentType.CENTER }),
+              bodyCell(String(nc.journeys), 1100, { fill: rows.length % 2 ? ROW_ALT : undefined, align: AlignmentType.CENTER }),
+              bodyCell(nc.km.toLocaleString('en-ZA', { maximumFractionDigits: 1 }), 1300, { fill: rows.length % 2 ? ROW_ALT : undefined, align: AlignmentType.RIGHT, bold: true }),
+              bodyCell(nc.mins > 0 ? fmtDuration(nc.mins) : "—", 1560, { fill: rows.length % 2 ? ROW_ALT : undefined, align: AlignmentType.CENTER }),
             ],
           })] : []),
           // Grand total row
           new TableRow({
             cantSplit: true,
             children: [
-              bodyCell("Total", 3300, { fill: NAVY_DARK, color: "FFFFFF", bold: true }),
-              bodyCell(String(tt.visits), 1100, { fill: NAVY_DARK, color: "FFFFFF", bold: true, align: AlignmentType.CENTER }),
-              bodyCell(String(grandJourneys), 1300, { fill: NAVY_DARK, color: "FFFFFF", bold: true, align: AlignmentType.CENTER }),
-              bodyCell(grandKm.toLocaleString('en-ZA', { maximumFractionDigits: 1 }), 1500, { fill: NAVY_DARK, color: "FFFFFF", bold: true, align: AlignmentType.RIGHT }),
-              bodyCell(fmtDuration(grandMins), 2160, { fill: NAVY_DARK, color: "FFFFFF", bold: true, align: AlignmentType.CENTER }),
+              bodyCell("Total", 2700, { fill: NAVY_DARK, color: "FFFFFF", bold: true }),
+              bodyCell(String(tt.visits), 900, { fill: NAVY_DARK, color: "FFFFFF", bold: true, align: AlignmentType.CENTER }),
+              bodyCell(String(tt.ccma || 0), 900, { fill: NAVY_DARK, color: "FFFFFF", bold: true, align: AlignmentType.CENTER }),
+              bodyCell(String(tt.bc || 0), 900, { fill: NAVY_DARK, color: "FFFFFF", bold: true, align: AlignmentType.CENTER }),
+              bodyCell(String(grandJourneys), 1100, { fill: NAVY_DARK, color: "FFFFFF", bold: true, align: AlignmentType.CENTER }),
+              bodyCell(grandKm.toLocaleString('en-ZA', { maximumFractionDigits: 1 }), 1300, { fill: NAVY_DARK, color: "FFFFFF", bold: true, align: AlignmentType.RIGHT }),
+              bodyCell(fmtDuration(grandMins), 1560, { fill: NAVY_DARK, color: "FFFFFF", bold: true, align: AlignmentType.CENTER }),
             ],
           }),
         ],
