@@ -519,16 +519,62 @@
   }
   .trip-summary .stat-cell label { margin-bottom: 4px; }
   .sync-btn {
-    margin-left: 10px;
+    margin-left: auto;
     background: transparent;
+    border: 1px solid var(--accent);
     color: var(--accent);
-    border: 1px solid var(--accent-soft);
-    padding: 4px 10px;
-    border-radius: 4px;
+    padding: 6px 12px;
     font-size: 12px;
+    font-weight: 600;
+    border-radius: 5px;
     cursor: pointer;
+    transition: background 0.15s;
   }
   .sync-btn:hover { background: rgba(200,85,61,0.08); }
+
+  /* Auto-computed value badge under each stat field */
+  .stat-cell {
+    position: relative;
+  }
+  .stat-auto {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-top: 6px;
+    font-size: 11px;
+    color: var(--muted);
+    line-height: 1.3;
+  }
+  .stat-auto .computed-val {
+    font-family: 'JetBrains Mono', monospace;
+    font-weight: 600;
+    color: var(--ink-soft);
+    background: var(--cream);
+    padding: 1px 6px;
+    border-radius: 3px;
+  }
+  .stat-auto.matches .computed-val {
+    color: var(--green);
+    background: rgba(31, 122, 77, 0.08);
+  }
+  .stat-auto.differs .computed-val {
+    color: var(--accent);
+    background: rgba(200,85,61,0.08);
+  }
+  .stat-auto button {
+    background: transparent;
+    border: none;
+    color: var(--accent);
+    font-size: 11px;
+    font-weight: 600;
+    cursor: pointer;
+    padding: 0;
+    text-decoration: underline;
+    font-family: inherit;
+  }
+  .stat-auto button:hover { color: #b54a35; }
+  .stat-auto.matches button,
+  .stat-auto.unset    button { display: none; }
 
   .trip-toolbar {
     display: flex;
@@ -1354,6 +1400,56 @@
 
     return { perClient: list, nonClient: { km: nonClientKm, mins: nonClientMins, journeys: nonClientCount }, totals };
   }
+
+  // ----- Auto-compute "Period at a Glance" cover stats from existing data -----
+  // Parses the leading number out of a headCount string like "42 (38)" → 42.
+  // Returns 0 for blank / unparseable.
+  function parseHeadCount(s) {
+    if (s == null) return 0;
+    const m = String(s).match(/-?\d[\d\s,]*/);
+    if (!m) return 0;
+    const n = parseInt(m[0].replace(/[\s,]/g, ''), 10);
+    return isFinite(n) ? n : 0;
+  }
+
+  function computeCoverStats() {
+    const clients   = state.clients || [];
+    const otherCli  = state.otherClients || [];
+
+    const outsourced = clients.filter(c => c.type === 'outsourced');
+    const payroll    = clients.filter(c => c.type === 'payroll');
+    const otherTyped = clients.filter(c => c.type === 'other');
+
+    // Total visits across all main clients
+    const clientVisits = clients.reduce((acc, c) => acc + ((c.visits || []).length), 0);
+
+    // Combined kilometres: Trip Log + CCMA journeys + Bargaining Council journeys
+    const totals = tripTotals(allJourneys());
+    const km = totals.km;
+
+    // Clients Assisted: clients with at least one visit + unique other-client names
+    const visitedClients = clients.filter(c => (c.visits || []).length > 0).length;
+    const uniqOther = new Set(otherCli.map(o => (o.client || '').trim()).filter(Boolean));
+    const clientsAssisted = visitedClients + uniqOther.size;
+
+    // Other Clients count: separate "Other Clients Assisted" entries + clients typed as 'other'
+    const otherClientsTotal = uniqOther.size + otherTyped.length;
+
+    // Employee head counts by type (sum the leading number from each client's headCount field)
+    const outsourcedEmployees = outsourced.reduce((acc, c) => acc + parseHeadCount(c.headCount), 0);
+    const payrollEmployees    = payroll.reduce((acc, c) => acc + parseHeadCount(c.headCount), 0);
+
+    return {
+      clientsAssisted:      String(clientsAssisted),
+      clientVisits:         String(clientVisits),
+      kilometres:           km.toLocaleString('en-ZA', { maximumFractionDigits: 0 }) + ' km',
+      outsourcedClients:    String(outsourced.length),
+      payrollOnlyClients:   String(payroll.length),
+      otherClients:         String(otherClientsTotal),
+      outsourcedEmployees:  String(outsourcedEmployees),
+      payrollOnlyEmployees: String(payrollEmployees),
+    };
+  }
   let state;
   let currentView = { type: 'meta', clientIdx: 0 };
 
@@ -1534,9 +1630,14 @@
     if (!Array.isArray(s.trips)) s.trips = [];
     if (!s.tripFilter) s.tripFilter = { client: '', from: '', to: '' };
     if (!s.meta) s.meta = JSON.parse(JSON.stringify(DEFAULT_STATE.meta));
+    if (!s.meta.stats) s.meta.stats = JSON.parse(JSON.stringify(DEFAULT_STATE.meta.stats));
     if (!Array.isArray(s.clients)) s.clients = [];
     if (!Array.isArray(s.otherClients)) s.otherClients = [];
     if (typeof s._updatedAt !== 'number') s._updatedAt = 0;
+    // Ensure every client has a 'type' field (defaults to unset)
+    for (const c of s.clients) {
+      if (typeof c.type !== 'string') c.type = '';
+    }
     ensureVenueArrays(s);
     return s;
   }
@@ -2384,26 +2485,47 @@
         <div class="card-header">
           <div class="card-title">Period at a Glance</div>
           <div class="card-subtitle">Summary stats — shown in the cover page boxes</div>
+          <button class="sync-btn" id="syncCoverStatsBtn" title="Auto-fill all 8 boxes from your clients, visits, head counts and journey log. Empty boxes get filled; non-empty boxes only change if they differ.">Sync all from data ↻</button>
         </div>
         <div class="stats-grid">
-          ${[
-            ['clientsAssisted', 'Clients Assisted'],
-            ['clientVisits', 'Client Visits'],
-            ['kilometres', 'Distance Travelled'],
-            ['outsourcedClients', 'Outsourced Clients'],
-            ['payrollOnlyClients', 'Payroll-Only Clients'],
-            ['otherClients', 'Other Clients'],
-            ['outsourcedEmployees', 'Outsourced Employees'],
-            ['payrollOnlyEmployees', 'Payroll-Only Employees'],
-          ].map(([k, lbl]) => `
-            <div class="stat-cell">
-              <label>${lbl}</label>
-              <input type="text" data-stat="${k}" value="${escapeHtml(m.stats[k])}" />
-            </div>
-          `).join('')}
+          ${(() => {
+            const auto = computeCoverStats();
+            const fields = [
+              ['clientsAssisted', 'Clients Assisted'],
+              ['clientVisits', 'Client Visits'],
+              ['kilometres', 'Distance Travelled'],
+              ['outsourcedClients', 'Outsourced Clients'],
+              ['payrollOnlyClients', 'Payroll-Only Clients'],
+              ['otherClients', 'Other Clients'],
+              ['outsourcedEmployees', 'Outsourced Employees'],
+              ['payrollOnlyEmployees', 'Payroll-Only Employees'],
+            ];
+            return fields.map(([k, lbl]) => {
+              const current  = (m.stats[k] || '').toString().trim();
+              const computed = (auto[k]    || '').toString().trim();
+              let cls = 'unset';
+              if (current && current === computed) cls = 'matches';
+              else if (current && current !== computed) cls = 'differs';
+              else if (!current && computed && computed !== '0' && computed !== '0 km') cls = 'unset';
+              return `
+                <div class="stat-cell">
+                  <label>${lbl}</label>
+                  <input type="text" data-stat="${k}" value="${escapeHtml(m.stats[k])}" />
+                  <div class="stat-auto ${cls}">
+                    <span>auto:</span>
+                    <span class="computed-val">${escapeHtml(computed || '—')}</span>
+                    ${cls === 'differs' ? `<button type="button" data-apply-auto="${k}" title="Replace with auto value">use</button>` : ''}
+                    ${cls === 'unset' && computed && computed !== '0' && computed !== '0 km' ? `<button type="button" data-apply-auto="${k}">fill</button>` : ''}
+                  </div>
+                </div>
+              `;
+            }).join('');
+          })()}
         </div>
         <p class="input-help" style="margin-top: 12px;">
           Tip: these are entered as text so you can write "2,556 km" or "≈ 17". They appear exactly as written in the report.
+          The <em>auto</em> badge under each box shows what would be filled in if you click <strong>Sync all from data</strong>.
+          To make the Outsourced / Payroll-Only / Employees boxes auto-fill, set each client's <strong>Type</strong> field on its profile page.
         </p>
       </div>
 
@@ -2647,6 +2769,65 @@
         save();
       });
     });
+
+    // Sync all — fill every box from auto-computed values.
+    // Empty boxes always get filled. Non-empty boxes only get overwritten
+    // after a confirmation, since the user may have hand-typed a value.
+    const syncAllBtn = document.getElementById('syncCoverStatsBtn');
+    if (syncAllBtn) {
+      syncAllBtn.addEventListener('click', async () => {
+        const auto = computeCoverStats();
+        const stats = state.meta.stats;
+        const willOverwrite = [];
+        const willFill = [];
+        for (const k of Object.keys(auto)) {
+          const cur = (stats[k] || '').toString().trim();
+          const val = auto[k];
+          if (!val || val === '0' || val === '0 km') continue; // skip zero values
+          if (!cur) willFill.push(k);
+          else if (cur !== val) willOverwrite.push(k);
+        }
+        if (willFill.length === 0 && willOverwrite.length === 0) {
+          toast('All boxes already match the computed values');
+          return;
+        }
+        let proceed = true;
+        if (willOverwrite.length > 0) {
+          proceed = await confirmDialog(
+            'Overwrite manually-typed values?',
+            `${willFill.length} empty box${willFill.length === 1 ? '' : 'es'} will be filled. ${willOverwrite.length} box${willOverwrite.length === 1 ? '' : 'es'} you typed values into will be replaced with auto-computed values. Continue?`
+          );
+        }
+        if (!proceed) {
+          // Fill only the empty ones — safe partial sync
+          if (willFill.length > 0) {
+            for (const k of willFill) stats[k] = auto[k];
+            save();
+            renderContent();
+            toast(`Filled ${willFill.length} empty box${willFill.length === 1 ? '' : 'es'}`);
+          }
+          return;
+        }
+        for (const k of [...willFill, ...willOverwrite]) stats[k] = auto[k];
+        save();
+        renderContent();
+        toast(`Synced ${willFill.length + willOverwrite.length} box${willFill.length + willOverwrite.length === 1 ? '' : 'es'} from your data`);
+      });
+    }
+
+    // Per-box "fill" / "use" buttons — apply a single auto value
+    document.querySelectorAll('[data-apply-auto]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const k = btn.dataset.applyAuto;
+        const auto = computeCoverStats();
+        if (auto[k] != null) {
+          state.meta.stats[k] = auto[k];
+          save();
+          renderContent();
+          toast(`${k} set to ${auto[k]}`);
+        }
+      });
+    });
   }
 
   function renderClientView(cli, idx) {
@@ -2684,6 +2865,18 @@
             <label>Payroll Frequency</label>
             <input type="text" data-client="frequency" value="${escapeHtml(cli.frequency)}" />
           </div>
+        </div>
+        <div class="field-row">
+          <div class="field">
+            <label>Client Type <span style="color:var(--muted);font-weight:400;">(used for Period at a Glance auto-fill)</span></label>
+            <select data-client="type">
+              <option value=""           ${(cli.type || '') === ''           ? 'selected' : ''}>— not set —</option>
+              <option value="outsourced" ${(cli.type || '') === 'outsourced' ? 'selected' : ''}>Outsourced</option>
+              <option value="payroll"    ${(cli.type || '') === 'payroll'    ? 'selected' : ''}>Payroll-Only</option>
+              <option value="other"      ${(cli.type || '') === 'other'      ? 'selected' : ''}>Other</option>
+            </select>
+          </div>
+          <div class="field"><!-- spacer to keep grid balance --></div>
         </div>
       </div>
 
@@ -4229,7 +4422,7 @@
     document.getElementById('addClientBtn').addEventListener('click', () => {
       state.clients.push({
         name: 'New Client',
-        contact: '', tel: '', headCount: '', frequency: '',
+        contact: '', tel: '', headCount: '', frequency: '', type: '',
         visits: [],
         discipline: ['Not at this time.'],
         followup: ['Not at this time.'],
