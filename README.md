@@ -7,7 +7,7 @@ A small static website hosting internal tools for Ubuntu Resource Management con
 | File | Purpose |
 |---|---|
 | `index.html` | Landing page — lists the available tools |
-| `monthly-service-report.html` | The Monthly Service Report Editor app (with Drive sync) |
+| `monthly-service-report_1.html` | The Monthly Service Report Editor app (with Drive sync) |
 | `README.md` | This file — deployment instructions |
 | `SETUP-GOOGLE-DRIVE.md` | Step-by-step Google Cloud setup to enable Drive sync |
 
@@ -29,7 +29,7 @@ That's it. Pure static HTML. No build step, no Node, no dependencies to install.
 ### Step 2 · Upload the files
 
 1. On the new repo's page, click **Add file** → **Upload files**.
-2. Drag **`index.html`**, **`monthly-service-report.html`**, **`README.md`** and **`SETUP-GOOGLE-DRIVE.md`** into the upload area.
+2. Drag **`index.html`**, **`monthly-service-report_1.html`**, **`README.md`** and **`SETUP-GOOGLE-DRIVE.md`** into the upload area.
 3. Scroll down, leave the commit message as-is, click **Commit changes**.
 
 ### Step 3 · Turn on GitHub Pages
