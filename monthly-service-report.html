@@ -2146,6 +2146,16 @@
     let pullInFlight  = false;
     let unsubReport   = null;  // Firestore live-update unsubscribe
 
+    // Echo-suppression: every save stamps state._updatedAt with Date.now().
+    // We remember our own last save's timestamp here. When a Firestore snapshot
+    // arrives whose _updatedAt matches what we just wrote, we know it's our own
+    // echo and ignore it. Without this guard, the echo would replace the live
+    // DOM, destroying input elements mid-typing and losing focus.
+    let lastWriteTimestamp = 0;
+    // We also tag every write with a per-session ID so we can recognise our
+    // own writes even if another device coincidentally writes the same ms.
+    const SESSION_ID = Math.random().toString(36).slice(2) + Date.now().toString(36);
+
     function currentMonthKey(d) {
       d = d || new Date();
       const y = d.getFullYear();
@@ -2315,17 +2325,37 @@
         const ref = firebaseLibs.doc(db, 'users', email, 'reports', monthKey);
         // Live subscription — auto-updates when another device saves
         unsubReport = firebaseLibs.onSnapshot(ref, (snap) => {
-          if (pullInFlight) return; // ignore our own echoes
-          if (snap.exists()) {
-            const remote = snap.data();
-            applyRemoteState(remote);
-          } else {
+          if (!snap.exists()) {
             // No report for this month yet — start fresh
             const fresh = JSON.parse(JSON.stringify(DEFAULT_STATE));
             fresh._month = monthKey;
             fresh._owner = email;
             applyRemoteState(fresh);
+            setStatus('synced'); updatePillUI();
+            return;
           }
+          const remote = snap.data();
+
+          // ---- Echo-suppression: did THIS device produce this snapshot? ----
+          // 1. If the snapshot's _sessionId matches our session, it's our echo.
+          // 2. If its _updatedAt matches the last write we made, it's our echo.
+          // Either signal alone is enough — we OR them to be belt-and-braces.
+          const isOurEcho =
+            (remote._sessionId && remote._sessionId === SESSION_ID) ||
+            (remote._updatedAt && remote._updatedAt === lastWriteTimestamp);
+          if (isOurEcho) {
+            setStatus('synced'); updatePillUI();
+            return; // Don't touch the DOM — user might be typing
+          }
+
+          // ---- Genuine remote update from another device ----
+          // Only apply if it's actually newer than what we last wrote.
+          // Stale snapshots that somehow arrive after ours are ignored.
+          if (remote._updatedAt && remote._updatedAt < lastWriteTimestamp) {
+            return;
+          }
+
+          applyRemoteState(remote);
           setStatus('synced'); updatePillUI();
         }, (err) => {
           console.warn('Firestore subscription error:', err);
@@ -2340,7 +2370,35 @@
       }
     }
 
+    // Pending remote state — used to defer applying a remote update while
+    // the user is actively typing in an input. Once they pause (blur or
+    // 2 seconds idle), we apply the pending update.
+    let pendingRemote = null;
+    let applyRemoteTimer = null;
+
+    function userIsTyping() {
+      const el = document.activeElement;
+      if (!el) return false;
+      const tag = el.tagName;
+      const editable = el.isContentEditable;
+      return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || editable;
+    }
+
     function applyRemoteState(remote) {
+      // If the user is mid-typing, don't yank the DOM out from under them.
+      // Stash the update and retry in 2 seconds.
+      if (userIsTyping()) {
+        pendingRemote = remote;
+        clearTimeout(applyRemoteTimer);
+        applyRemoteTimer = setTimeout(() => {
+          if (pendingRemote) {
+            const r = pendingRemote;
+            pendingRemote = null;
+            applyRemoteState(r); // recursive, but userIsTyping will pass by now
+          }
+        }, 2000);
+        return;
+      }
       const fresh = migrateState(remote);
       for (const k of Object.keys(state)) delete state[k];
       Object.assign(state, fresh);
@@ -2361,22 +2419,25 @@
       pushTimer = setTimeout(async () => {
         if (!navigator.onLine) { setStatus('offline'); updatePillUI(); return; }
         setStatus('syncing'); updatePillUI();
-        pullInFlight = true;
+        const writeTimestamp = Date.now();
         try {
           const ref = firebaseLibs.doc(db, 'users', viewingEmail, 'reports', currentMonth);
           const payload = JSON.parse(JSON.stringify(pendingState));
           payload._month = currentMonth;
           payload._owner = viewingEmail;
-          payload._updatedAt = Date.now();
+          payload._updatedAt = writeTimestamp;
           payload._updatedBy = currentUser.email;
+          payload._sessionId = SESSION_ID;
           payload._updatedAtServer = firebaseLibs.serverTimestamp();
+          // Record BEFORE the await so the echo (which can arrive before we
+          // get back here on slow networks) is recognised as ours.
+          lastWriteTimestamp = writeTimestamp;
           await firebaseLibs.setDoc(ref, payload, { merge: false });
           setStatus('synced');
         } catch (e) {
           console.warn('Save to Firestore failed:', e);
           setStatus('error');
         } finally {
-          pullInFlight = false;
           updatePillUI();
         }
       }, 1500);
