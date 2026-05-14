@@ -93,6 +93,15 @@
     color: rgba(255,255,255,0.4);
     font-weight: 600;
   }
+  .nav-subsection {
+    padding: 8px 24px 4px;
+    font-size: 9.5px;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    color: rgba(255,255,255,0.3);
+    font-weight: 600;
+  }
+  .nav-subsection + .nav-list { margin-bottom: 2px; }
   .nav-list {
     list-style: none;
     margin: 0;
@@ -1428,10 +1437,10 @@
     </ul>
 
     <div class="nav-section">CCMA</div>
-    <ul class="nav-list" id="ccmaNav"></ul>
+    <div id="ccmaNav"></div>
 
     <div class="nav-section">Bargaining Council</div>
-    <ul class="nav-list" id="bargainingNav"></ul>
+    <div id="bargainingNav"></div>
 
     <div class="nav-section">Clients</div>
     <ul class="nav-list" id="clientNav"></ul>
@@ -1617,25 +1626,44 @@
   //  show a "Setup required" screen.
   // ============================================================
   const firebaseConfig = {
-    apiKey: "AIzaSyCWP6a515dS0WAG0BIuGg7qlz_kxt6OkVw",
-  authDomain: "msr-editor-c2135.firebaseapp.com",
-  databaseURL: "https://msr-editor-c2135-default-rtdb.europe-west1.firebasedatabase.app",
-  projectId: "msr-editor-c2135",
-  storageBucket: "msr-editor-c2135.firebasestorage.app",
-  messagingSenderId: "187519346260",
-  appId: "1:187519346260:web:af80560934d105077a2fc1"
+    apiKey:            "",   // e.g. "AIza...."
+    authDomain:        "",   // e.g. "ubuntu-tools.firebaseapp.com"
+    projectId:         "",   // e.g. "ubuntu-tools"
+    storageBucket:     "",   // e.g. "ubuntu-tools.appspot.com"
+    messagingSenderId: "",   // e.g. "1234567890"
+    appId:             "",   // e.g. "1:1234567890:web:abc..."
   };
 
   // ----- CCMA & Bargaining Council venues -----
+  // Regions — controls how CCMA / BC venues are grouped in the sidebar
+  // and Word report. Add new regions here to expand to other provinces.
+  const REGIONS = [
+    { code: 'GP',  name: 'Gauteng' },
+    { code: 'KZN', name: 'KwaZulu-Natal' },
+  ];
+
   const CCMA_VENUES = [
-    { id: 'fox-street', shortName: 'Fox Street', fullName: 'CCMA - Fox Street' },
-    { id: 'benoni',     shortName: 'Benoni',     fullName: 'CCMA - Benoni' },
-    { id: 'pretoria',   shortName: 'Pretoria',   fullName: 'CCMA - Pretoria' },
+    // Gauteng
+    { id: 'fox-street',          region: 'GP',  shortName: 'Fox Street',       fullName: 'CCMA - Fox Street' },
+    { id: 'benoni',              region: 'GP',  shortName: 'Benoni',           fullName: 'CCMA - Benoni' },
+    { id: 'pretoria',            region: 'GP',  shortName: 'Pretoria',         fullName: 'CCMA - Pretoria' },
+    // KwaZulu-Natal
+    { id: 'kzn-durban',          region: 'KZN', shortName: 'Durban',           fullName: 'CCMA - Durban' },
+    { id: 'kzn-pietermaritzburg',region: 'KZN', shortName: 'Pietermaritzburg', fullName: 'CCMA - Pietermaritzburg' },
+    { id: 'kzn-newcastle',       region: 'KZN', shortName: 'Newcastle',        fullName: 'CCMA - Newcastle' },
+    { id: 'kzn-richards-bay',    region: 'KZN', shortName: 'Richards Bay',     fullName: 'CCMA - Richards Bay' },
+    { id: 'kzn-port-shepstone',  region: 'KZN', shortName: 'Port Shepstone',   fullName: 'CCMA - Port Shepstone' },
   ];
   const BC_VENUES = [
-    { id: 'metal-engineering-braamfontein', shortName: 'Metal Eng. — Braamfontein', fullName: 'Metal Engineering - Braamfontein' },
-    { id: 'drc-randburg',                   shortName: 'DRC — Randburg',            fullName: 'DRC - Randburg' },
-    { id: 'road-freight-braamfontein',      shortName: 'Road Freight — Braamfontein', fullName: 'Road Freight - Braamfontein' },
+    // Gauteng
+    { id: 'metal-engineering-braamfontein', region: 'GP',  shortName: 'Metal Eng. — Braamfontein', fullName: 'Metal Engineering - Braamfontein' },
+    { id: 'drc-randburg',                   region: 'GP',  shortName: 'DRC — Randburg',            fullName: 'DRC - Randburg' },
+    { id: 'road-freight-braamfontein',      region: 'GP',  shortName: 'Road Freight — Braamfontein', fullName: 'Road Freight - Braamfontein' },
+    // KwaZulu-Natal
+    { id: 'kzn-nbcrfli',                    region: 'KZN', shortName: 'NBCRFLI',                   fullName: 'NBCRFLI - KZN' },
+    { id: 'kzn-miebc',                      region: 'KZN', shortName: 'MIEBC',                     fullName: 'MIEBC - KZN' },
+    { id: 'kzn-mibco',                      region: 'KZN', shortName: 'MIBCO',                     fullName: 'MIBCO - KZN' },
+    { id: 'kzn-nbcpss',                     region: 'KZN', shortName: 'NBCPSS',                    fullName: 'NBCPSS - KZN' },
   ];
   function getVenueDef(category, venueId) {
     const list = category === 'ccma' ? CCMA_VENUES : BC_VENUES;
@@ -2801,37 +2829,35 @@
       </li>
     `).join('');
 
-    // CCMA venues
-    const ccmaNav = document.getElementById('ccmaNav');
-    if (ccmaNav) {
-      ccmaNav.innerHTML = CCMA_VENUES.map(v => {
-        const count = getVenueEntries('ccma', v.id).length;
-        const isActive = currentView.type === 'venue' && currentView.category === 'ccma' && currentView.venueId === v.id;
+    // Helper: render a category (CCMA or BC) grouped by region.
+    // Renders one small region heading + venue list per region that has venues.
+    function renderVenuesByRegion(containerId, category, venues, icon) {
+      const container = document.getElementById(containerId);
+      if (!container) return;
+      const html = REGIONS.map(region => {
+        const inRegion = venues.filter(v => v.region === region.code);
+        if (inRegion.length === 0) return '';
+        const items = inRegion.map(v => {
+          const count = getVenueEntries(category, v.id).length;
+          const isActive = currentView.type === 'venue' && currentView.category === category && currentView.venueId === v.id;
+          return `
+            <li class="nav-item ${isActive ? 'active' : ''}" data-view="venue" data-category="${category}" data-venue="${v.id}" title="${escapeHtml(v.fullName)}">
+              <span class="num">${icon}</span>
+              <span>${escapeHtml(v.shortName)}</span>
+              <span class="visits">${count}</span>
+            </li>
+          `;
+        }).join('');
         return `
-          <li class="nav-item ${isActive ? 'active' : ''}" data-view="venue" data-category="ccma" data-venue="${v.id}" title="${escapeHtml(v.fullName)}">
-            <span class="num">⚖</span>
-            <span>${escapeHtml(v.shortName)}</span>
-            <span class="visits">${count}</span>
-          </li>
+          <div class="nav-subsection">${escapeHtml(region.name)}</div>
+          <ul class="nav-list">${items}</ul>
         `;
       }).join('');
+      container.innerHTML = html;
     }
 
-    // Bargaining Council venues
-    const bcNav = document.getElementById('bargainingNav');
-    if (bcNav) {
-      bcNav.innerHTML = BC_VENUES.map(v => {
-        const count = getVenueEntries('bargaining', v.id).length;
-        const isActive = currentView.type === 'venue' && currentView.category === 'bargaining' && currentView.venueId === v.id;
-        return `
-          <li class="nav-item ${isActive ? 'active' : ''}" data-view="venue" data-category="bargaining" data-venue="${v.id}" title="${escapeHtml(v.fullName)}">
-            <span class="num">⚒</span>
-            <span>${escapeHtml(v.shortName)}</span>
-            <span class="visits">${count}</span>
-          </li>
-        `;
-      }).join('');
-    }
+    renderVenuesByRegion('ccmaNav',       'ccma',       CCMA_VENUES, '⚖');
+    renderVenuesByRegion('bargainingNav', 'bargaining', BC_VENUES,   '⚒');
 
     // Mark meta/other/trips/activity items active
     document.querySelectorAll('#metaNav .nav-item, #clientNav .nav-item, .nav-list .nav-item[data-view="other"], .nav-list .nav-item[data-view="trips"], .nav-list .nav-item[data-view="activity"]').forEach(el => {
@@ -4814,6 +4840,11 @@
       });
     }
 
+    const regionSubHeading = (text) => new Paragraph({
+      spacing: { before: 200, after: 80 },
+      keepNext: true,
+      children: [new TextRun({ text, italics: true, color: MUTED, size: 22, font: "Calibri" })],
+    });
     const venueSubHeading = (text) => new Paragraph({
       spacing: { before: 240, after: 120 },
       keepNext: true,
@@ -4829,13 +4860,26 @@
         sectionHeading("CCMA Attendances"),
         p(`Hearings and conciliations attended at CCMA venues during the period — ${ccmaAll.length} attendance${ccmaAll.length === 1 ? '' : 's'}, ${ccmaTotals.km.toLocaleString('en-ZA', { maximumFractionDigits: 0 })} km, ${fmtDuration(ccmaTotals.mins)} on the road.`, { color: SLATE, size: 20, spacing: { before: 0, after: 180 } }),
       );
-      for (const v of CCMA_VENUES) {
-        const entries = getVenueEntries('ccma', v.id);
-        if (entries.length === 0) continue;
-        children.push(
-          venueSubHeading(v.fullName),
-          buildJourneyTable(entries, "Client Represented"),
-        );
+      // Group venues by region — only emit a region heading if multiple regions
+      // have activity, so single-region consultants don't see a redundant header.
+      const ccmaRegionsWithActivity = REGIONS.filter(r =>
+        CCMA_VENUES.some(v => v.region === r.code && getVenueEntries('ccma', v.id).length > 0)
+      );
+      for (const region of REGIONS) {
+        const inRegion = CCMA_VENUES.filter(v => v.region === region.code);
+        const hasAny = inRegion.some(v => getVenueEntries('ccma', v.id).length > 0);
+        if (!hasAny) continue;
+        if (ccmaRegionsWithActivity.length > 1) {
+          children.push(regionSubHeading(region.name));
+        }
+        for (const v of inRegion) {
+          const entries = getVenueEntries('ccma', v.id);
+          if (entries.length === 0) continue;
+          children.push(
+            venueSubHeading(v.fullName),
+            buildJourneyTable(entries, "Client Represented"),
+          );
+        }
       }
     }
 
@@ -4847,13 +4891,24 @@
         sectionHeading("Bargaining Council Attendances"),
         p(`Hearings and matters attended at bargaining council venues during the period — ${bcAll.length} attendance${bcAll.length === 1 ? '' : 's'}, ${bcTotals.km.toLocaleString('en-ZA', { maximumFractionDigits: 0 })} km, ${fmtDuration(bcTotals.mins)} on the road.`, { color: SLATE, size: 20, spacing: { before: 0, after: 180 } }),
       );
-      for (const v of BC_VENUES) {
-        const entries = getVenueEntries('bargaining', v.id);
-        if (entries.length === 0) continue;
-        children.push(
-          venueSubHeading(v.fullName),
-          buildJourneyTable(entries, "Client Represented"),
-        );
+      const bcRegionsWithActivity = REGIONS.filter(r =>
+        BC_VENUES.some(v => v.region === r.code && getVenueEntries('bargaining', v.id).length > 0)
+      );
+      for (const region of REGIONS) {
+        const inRegion = BC_VENUES.filter(v => v.region === region.code);
+        const hasAny = inRegion.some(v => getVenueEntries('bargaining', v.id).length > 0);
+        if (!hasAny) continue;
+        if (bcRegionsWithActivity.length > 1) {
+          children.push(regionSubHeading(region.name));
+        }
+        for (const v of inRegion) {
+          const entries = getVenueEntries('bargaining', v.id);
+          if (entries.length === 0) continue;
+          children.push(
+            venueSubHeading(v.fullName),
+            buildJourneyTable(entries, "Client Represented"),
+          );
+        }
       }
     }
 
