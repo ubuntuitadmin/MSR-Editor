@@ -83,41 +83,31 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // Helper: is the signed-in user an admin?
     function isAdmin() {
       return request.auth != null
         && exists(/databases/$(database)/documents/admins/$(request.auth.token.email));
     }
 
-    // Helper: is the signed-in user the owner of this user doc?
     function isOwner(email) {
       return request.auth != null && request.auth.token.email == email;
     }
 
-    // User profile docs
     match /users/{email} {
-      // Anyone signed in can create their own profile (first sign-in)
-      // Owners can update their own; admins can read/update anyone's
       allow read:   if isOwner(email) || isAdmin();
       allow create: if isOwner(email);
       allow update: if isOwner(email) || isAdmin();
       allow delete: if isAdmin();
 
-      // Monthly reports
       match /reports/{month} {
         allow read, write: if isOwner(email) || isAdmin();
       }
     }
 
-    // Admins collection — only admins can read/write it. To add the first
-    // admin, you'll create the document directly in the Firebase console
-    // (see Step 7 in the setup guide).
     match /admins/{email} {
       allow read:  if isAdmin() || isOwner(email);
       allow write: if isAdmin();
     }
 
-    // IT monthly reports — admin-only (Tazz Duff IT Monthly Report).
     match /it-reports/{month} {
       allow read, write: if isAdmin();
     }
