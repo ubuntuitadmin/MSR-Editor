@@ -1377,6 +1377,157 @@
   .role-admin { color: var(--accent); font-weight: 600; }
   .role-consultant { color: var(--ink); }
 
+  /* IT report banner on admin dashboard */
+  .it-report-banner {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    background: var(--navy-dark, #162A45);
+    color: #fff;
+    border-radius: 10px;
+    padding: 20px 24px;
+    margin-bottom: 24px;
+  }
+  .it-report-banner-text { flex: 1; }
+  .it-report-banner-title {
+    font-family: 'Fraunces', serif;
+    font-weight: 600;
+    font-size: 20px;
+    margin-bottom: 4px;
+  }
+  .it-report-banner-sub {
+    font-size: 13px;
+    color: rgba(255,255,255,0.7);
+  }
+  .it-report-banner .btn-primary { white-space: nowrap; }
+
+  /* IT report editor */
+  .it-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    margin-bottom: 18px;
+    flex-wrap: wrap;
+  }
+  .it-toolbar-left {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+  .it-month-label {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--ink-soft);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+  }
+  .it-save-status {
+    font-size: 12px;
+    color: var(--muted);
+  }
+  .it-save-status.saving { color: #8a6914; }
+  .it-save-status.saved  { color: var(--green); }
+  .it-save-status.error  { color: #C0392B; }
+
+  .add-btn-sm {
+    margin-left: auto;
+    background: transparent;
+    border: 1px solid var(--accent);
+    color: var(--accent);
+    padding: 5px 12px;
+    border-radius: 5px;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    font-family: 'Inter Tight', sans-serif;
+  }
+  .add-btn-sm:hover { background: rgba(200,85,61,0.08); }
+
+  .it-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 4px;
+  }
+  .it-table th {
+    text-align: left;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--ink-soft);
+    font-weight: 600;
+    padding: 6px 8px;
+    border-bottom: 1px solid var(--soft-line);
+  }
+  .it-table td {
+    padding: 4px 6px;
+    vertical-align: middle;
+  }
+  .it-table input,
+  .it-table select {
+    width: 100%;
+    padding: 7px 9px;
+    border: 1px solid var(--border);
+    border-radius: 5px;
+    font-family: 'Inter Tight', sans-serif;
+    font-size: 13px;
+    background: #fff;
+  }
+  .it-del {
+    background: transparent;
+    border: none;
+    color: var(--muted);
+    cursor: pointer;
+    font-size: 14px;
+    padding: 4px 8px;
+    border-radius: 4px;
+  }
+  .it-del:hover { color: #C0392B; background: rgba(192,57,43,0.08); }
+
+  .field-label-block {
+    display: block;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--ink-soft);
+    margin-bottom: 6px;
+  }
+  .it-textarea {
+    width: 100%;
+    padding: 9px 11px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    font-family: 'Inter Tight', sans-serif;
+    font-size: 13.5px;
+    line-height: 1.5;
+    resize: vertical;
+    background: #fff;
+  }
+  .it-activity-row {
+    display: grid;
+    grid-template-columns: 180px 1fr;
+    gap: 12px;
+    margin-bottom: 12px;
+    align-items: start;
+  }
+  .it-activity-date {
+    display: flex;
+    gap: 4px;
+    align-items: center;
+  }
+  .it-activity-date input {
+    flex: 1;
+    padding: 7px 9px;
+    border: 1px solid var(--border);
+    border-radius: 5px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12.5px;
+    background: #fff;
+  }
+  @media (max-width: 640px) {
+    .it-activity-row { grid-template-columns: 1fr; }
+  }
+
 </style>
 </head>
 <body>
@@ -2585,6 +2736,9 @@
       viewConsultant, backToDashboard,
       getCurrentUser, getIsAdmin, getCurrentMonth, getViewingEmail,
       isConfigured, currentMonthKey,
+      // Internals exposed for the ITReport module (admin-only second report type)
+      _libs: () => firebaseLibs,
+      _db:   () => db,
     };
   })();
 
@@ -2950,6 +3104,11 @@
       renderAdminDashboard();
       return;
     }
+    if (currentView.type === 'it-report') {
+      // The ITReport module manages its own rendering; nothing to do here.
+      title.textContent = 'IT Monthly Report';
+      return;
+    }
     if (currentView.type === 'meta') {
       title.textContent = 'Cover & Stats';
       c.innerHTML = renderMetaView();
@@ -3009,6 +3168,14 @@
         <h1 class="serif">Admin Dashboard</h1>
         <p class="dashboard-sub">Cross-team overview of consultant activity. Pick a month and drill into any consultant's report.</p>
 
+        <div class="it-report-banner" id="itReportBanner">
+          <div class="it-report-banner-text">
+            <div class="it-report-banner-title">Tazz Duff IT Monthly Report</div>
+            <div class="it-report-banner-sub">Maintain and generate your monthly IT department report. Stored by month in history.</div>
+          </div>
+          <button class="btn-primary" id="openItReportBtn">Open IT Report →</button>
+        </div>
+
         <div class="admin-month-bar">
           <label>Month</label>
           <select id="adminMonthPicker"></select>
@@ -3045,6 +3212,10 @@
         </div>
       </div>
     `;
+
+    document.getElementById('openItReportBtn').addEventListener('click', () => {
+      ITReport.open();
+    });
 
     // Build month picker options (current month back through last 24 months — enough for typical history)
     const picker = document.getElementById('adminMonthPicker');
@@ -5134,6 +5305,817 @@
       }
     }
   }
+
+  // ============================================================
+  //  IT MONTHLY REPORT MODULE (admin-only)
+  //  A second, separate report type for the IT department.
+  //  - Own Firestore collection: /it-reports/{YYYY-MM}
+  //  - Full editable form (licences, costs, laptops, activities)
+  //  - New month pre-fills licences/costs/laptops from previous,
+  //    blank activity log
+  //  - One-button Word generation matching the April layout
+  //  - Monthly history via a month picker
+  // ============================================================
+  const ITReport = (function () {
+    let itState = null;          // current month's IT report data
+    let itMonth = null;          // "YYYY-MM"
+    let itSaveTimer = null;
+    let itLoaded = false;
+
+    // ----- April 2026 seed data (from the original Word document) -----
+    const APRIL_2026 = {
+      _month: '2026-04',
+      preparedBy: 'Tazz Duff',
+      department: 'Information Technology',
+      reportStatus: 'Final',
+      workingDays: '17',
+      licences: [
+        { name: 'Sage Accpac',           lastRenewed: '30/11/2025', nextExpiry: '30/11/2026', basis: 'Annual' },
+        { name: 'Perisoft',              lastRenewed: '01/11/2025', nextExpiry: '01/11/2026', basis: 'Annual' },
+        { name: 'Atom',                  lastRenewed: '21/09/2025', nextExpiry: '21/09/2026', basis: 'Annual' },
+        { name: 'ESET Anti-Virus',       lastRenewed: '25/08/2025', nextExpiry: '25/08/2026', basis: 'Annual' },
+        { name: 'One Liquid 500MB Line', lastRenewed: '25/08/2025', nextExpiry: '25/08/2026', basis: 'Annual contract' },
+        { name: 'Firewall',              lastRenewed: '20/03/2025', nextExpiry: '21/02/2026', basis: 'Annual (R17,407.19)' },
+        { name: 'Backblaze',             lastRenewed: 'Monthly',    nextExpiry: 'Monthly',    basis: 'Monthly – paid by credit card (≈$165)' },
+        { name: 'Microsoft Office 365',  lastRenewed: 'Monthly',    nextExpiry: 'Monthly',    basis: 'Monthly subscription' },
+      ],
+      costs: [
+        { name: 'Sage VIP',   amount: 'R110,910.00', frequency: 'Per year' },
+        { name: 'Sage 300',   amount: 'R57,841.55',  frequency: 'Per year' },
+        { name: 'Perisoft',   amount: 'R8,190.99',   frequency: 'Per year' },
+        { name: 'Atom',       amount: 'R6,353.75',   frequency: 'Per year' },
+        { name: 'ESET',       amount: 'R7,060.00',   frequency: 'Per year' },
+        { name: 'Firewall',   amount: 'R17,407.19',  frequency: 'Per year' },
+        { name: 'Backblaze',  amount: '≈ $165.00',   frequency: 'Per month' },
+        { name: 'One Liquid', amount: 'R7,500.00',   frequency: 'Per month' },
+      ],
+      office365: [
+        { name: 'Ubuntu',    amount: 'R13,184.75', frequency: 'Per month' },
+        { name: 'CTL Group', amount: 'R6,422.75',  frequency: 'Per month' },
+        { name: 'Fourm',     amount: 'R2,485.79',  frequency: 'Per month' },
+        { name: 'DLI',       amount: 'R3,473.00',  frequency: 'Per month' },
+      ],
+      laptops: [
+        { name: 'Connor',    status: 'Completed' },
+        { name: 'Tanya',     status: 'Completed' },
+        { name: 'Sarah',     status: 'Completed' },
+        { name: 'Charmaine', status: 'Completed' },
+        { name: 'Karen',     status: 'Outstanding' },
+        { name: 'Tazz',      status: 'Outstanding' },
+        { name: 'Kitso',     status: 'Outstanding' },
+        { name: 'Dewald',    status: 'Outstanding' },
+        { name: 'Spero',     status: 'Outstanding' },
+        { name: 'Liam',      status: 'Outstanding' },
+      ],
+      standardRoutines: [
+        'Laptops removed from server room at start of day',
+        'VPN link, Accpac and VIP servers verified operational',
+        'Laptops secured in server room at end of day',
+        'Daily Accpac backup completed',
+      ],
+      activities: [
+        { date: '01/04/2026', activities: ['Completed laptop setup for Cindy', "Resolved Sarah's email issue", 'Set up boardroom for Dewald'] },
+        { date: '02/04/2026', activities: ['Resolved Google Docs issue for Cindy', "Sorted Charmaine's email view configuration"] },
+        { date: '07/04/2026', activities: ["Resolved BitLocker issue on Stacey's old laptop", "Format and reload of Stacey's laptop for Skye"] },
+        { date: '08/04/2026', activities: ['Completed laptop setup for Skye', 'Assisted Aimée with file association settings'] },
+        { date: '09/04/2026', activities: ['Assisted Jabu with VPN connection', "Captured Skye's fingerprints for access control", 'Set up boardroom for Liam (hearing)'] },
+        { date: '10/04/2026', activities: ['Reception duty: 09:30, 12:00 and 14:30', 'Assisted Erika with email routing to incorrect folders'] },
+        { date: '13/04/2026', activities: ['Resolved Wi-Fi connectivity issue', 'Repaired printers at DLI and CTL', 'Assisted Busi with Excel document', 'Assisted Jo with printer issue', 'Assisted Marthie with Standard Bank Business Online'] },
+        { date: '14/04/2026', activities: ['Assisted Dewald with email connection issue', "Captured Tracey's fingerprints for access control"] },
+        { date: '15/04/2026', activities: ['Assisted Tanya with Word documents', 'Reception duty: 09:30, 12:00 and 14:30', "Resolved WhatsApp issue on Charmaine's laptop", "Ran Windows updates on Liesel's and Aimée's laptops", 'Refilled diesel drums for the generator'] },
+        { date: '16/04/2026', activities: ['Reception duty: 12:00', 'Assisted Skye with PDF documents not opening'] },
+        { date: '17/04/2026', activities: ['Resolved printing issue at DLI'] },
+        { date: '20/04/2026', activities: ['Resolved Outlook issue for Marthie', 'Reinstalled Standard Bank app for Marthie', 'Reception duty: 12:00 and 14:30', 'Assisted Suren with RDP configuration'] },
+        { date: '21/04/2026', activities: ['Cleared printer jam at DLI', 'Assisted Sandra with Accpac issue', "Site visit to Elize's residence – new printer setup", 'Assisted Tracey with printer issue', 'Assisted Liesel with printing from VIP', 'Reception duty: 09:30', 'Assisted Morris with VIP error', 'Copied backups to NAS', 'Assisted George (Butterfly) with PDF document', "Repaired Zandi's printer"] },
+        { date: '22/04/2026', activities: ['Development work on internal application', 'Assisted Sandra with Accpac issue'] },
+        { date: '23/04/2026', activities: ["Site visit to Elise's residence – printer and scan-to-email setup", 'Set up boardroom for Kitso', 'Procured supplies from Buco for Artwell (office)', 'Switchboard duty: 12:00 and 14:30'] },
+        { date: '24/04/2026', activities: ['Assisted Zandi with printer issue'] },
+        { date: '28/04/2026', activities: ['Development work on AI application', 'Assisted Tracey (CLI) with printing issue', 'Continued development on internal application', 'Reception duty: 09:30, 12:00 and 14:30'] },
+      ],
+      _updatedAt: Date.now(),
+    };
+
+    // One-time: write the April 2026 seed into Firestore if it doesn't exist.
+    async function seedApril() {
+      const libs = CloudSync._libs && CloudSync._libs();
+      const db = CloudSync._db && CloudSync._db();
+      if (!libs || !db) { toast('Not connected — cannot seed.', true); return; }
+      try {
+        const ref = libs.doc(db, 'it-reports', '2026-04');
+        const snap = await libs.getDoc(ref);
+        if (snap.exists()) {
+          const ok = await confirmDialog('April 2026 already exists', 'There is already an April 2026 IT report stored. Overwrite it with the original document data?');
+          if (!ok) return;
+        }
+        const payload = JSON.parse(JSON.stringify(APRIL_2026));
+        payload._updatedAtServer = libs.serverTimestamp();
+        await libs.setDoc(ref, payload, { merge: false });
+        toast('April 2026 data loaded.');
+        await load('2026-04');
+      } catch (e) {
+        console.warn('Seed failed:', e);
+        toast('Seed failed: ' + (e.message || e), true);
+      }
+    }
+
+    function blankState() {
+      return {
+        _month: '',
+        preparedBy: 'Tazz Duff',
+        department: 'Information Technology',
+        reportStatus: 'Final',
+        workingDays: '',
+        // Software Licence Register
+        licences: [],
+        // Annual Software & Service Costs
+        costs: [],
+        // Office 365 by entity
+        office365: [],
+        // Laptop Replacement Programme
+        laptops: [],
+        // Standard daily routines (one per line)
+        standardRoutines: [
+          'Laptops removed from server room at start of day',
+          'VPN link, Accpac and VIP servers verified operational',
+          'Laptops secured in server room at end of day',
+          'Daily Accpac backup completed',
+        ],
+        // Specific activities by date: [{ date: '01/04/2026', activities: ['...','...'] }]
+        activities: [],
+        _updatedAt: 0,
+      };
+    }
+
+    function monthLabel(key) {
+      if (!key) return '';
+      const [y, m] = key.split('-');
+      return new Date(Number(y), Number(m) - 1, 1).toLocaleDateString('en-ZA', { month: 'long', year: 'numeric' });
+    }
+    function periodLabel(key) {
+      if (!key) return '';
+      const [y, m] = key.split('-');
+      const last = new Date(Number(y), Number(m), 0).getDate();
+      const monthName = new Date(Number(y), Number(m) - 1, 1).toLocaleDateString('en-ZA', { month: 'long' });
+      return `01 – ${last} ${monthName} ${y}`;
+    }
+
+    function fb() { return CloudSync._fb ? CloudSync._fb() : null; }
+
+    // ----- Open the IT report (entry from dashboard) -----
+    async function open(monthKey) {
+      itMonth = monthKey || CloudSync.currentMonthKey();
+      currentView = { type: 'it-report' };
+      // Sidebar: hide consultant nav, show a simple "back to dashboard"
+      document.getElementById('monthPickerWrap').classList.add('hidden');
+      document.getElementById('clientNav').innerHTML = '';
+      document.getElementById('ccmaNav').innerHTML = '';
+      document.getElementById('bargainingNav').innerHTML = '';
+      document.getElementById('addClientBtn').classList.add('hidden');
+      const backBtn = document.getElementById('backToDashboardBtn');
+      backBtn.classList.remove('hidden');
+      backBtn.onclick = () => CloudSync.backToDashboard();
+
+      document.getElementById('viewTitle').textContent = 'IT Monthly Report';
+      await load(itMonth);
+    }
+
+    async function load(monthKey) {
+      itMonth = monthKey;
+      const libs = CloudSync._libs && CloudSync._libs();
+      const db = CloudSync._db && CloudSync._db();
+      renderLoading();
+      if (!libs || !db) { itState = blankState(); itState._month = monthKey; renderEditor(); return; }
+      try {
+        const ref = libs.doc(db, 'it-reports', monthKey);
+        const snap = await libs.getDoc(ref);
+        if (snap.exists()) {
+          itState = Object.assign(blankState(), snap.data());
+        } else {
+          // No report for this month — offer to pre-fill from the most recent prior month
+          itState = await buildNewMonth(monthKey);
+        }
+        itState._month = monthKey;
+        itLoaded = true;
+        renderEditor();
+      } catch (e) {
+        console.warn('IT report load failed:', e);
+        itState = blankState(); itState._month = monthKey;
+        renderEditor();
+      }
+    }
+
+    // Build a new month, pre-filling licences/costs/laptops from the latest prior month.
+    async function buildNewMonth(monthKey) {
+      const fresh = blankState();
+      fresh._month = monthKey;
+      const libs = CloudSync._libs && CloudSync._libs();
+      const db = CloudSync._db && CloudSync._db();
+      if (!libs || !db) return fresh;
+      try {
+        const months = await listMonths();
+        const prior = months.filter(m => m < monthKey).sort().reverse()[0];
+        if (prior) {
+          const ref = libs.doc(db, 'it-reports', prior);
+          const snap = await libs.getDoc(ref);
+          if (snap.exists()) {
+            const prev = snap.data();
+            // Carry forward the slow-changing sections; blank the activity log
+            fresh.preparedBy = prev.preparedBy || fresh.preparedBy;
+            fresh.department = prev.department || fresh.department;
+            fresh.reportStatus = 'Final';
+            fresh.licences = JSON.parse(JSON.stringify(prev.licences || []));
+            fresh.costs = JSON.parse(JSON.stringify(prev.costs || []));
+            fresh.office365 = JSON.parse(JSON.stringify(prev.office365 || []));
+            fresh.laptops = JSON.parse(JSON.stringify(prev.laptops || []));
+            fresh.standardRoutines = JSON.parse(JSON.stringify(prev.standardRoutines || fresh.standardRoutines));
+            fresh.activities = []; // blank — fresh month
+            fresh.workingDays = '';
+          }
+        }
+      } catch (e) { console.warn('Pre-fill failed:', e); }
+      return fresh;
+    }
+
+    async function listMonths() {
+      const libs = CloudSync._libs && CloudSync._libs();
+      const db = CloudSync._db && CloudSync._db();
+      if (!libs || !db) return [];
+      try {
+        const snap = await libs.getDocs(libs.collection(db, 'it-reports'));
+        const months = [];
+        snap.forEach(d => months.push(d.id));
+        return months.sort().reverse();
+      } catch (e) { return []; }
+    }
+
+    // ----- Save (debounced) -----
+    function save() {
+      if (!itState) return;
+      itState._updatedAt = Date.now();
+      clearTimeout(itSaveTimer);
+      setItStatus('saving');
+      itSaveTimer = setTimeout(async () => {
+        const libs = CloudSync._libs && CloudSync._libs();
+        const db = CloudSync._db && CloudSync._db();
+        if (!libs || !db) { setItStatus('error'); return; }
+        try {
+          const ref = libs.doc(db, 'it-reports', itMonth);
+          const payload = JSON.parse(JSON.stringify(itState));
+          payload._month = itMonth;
+          payload._updatedAtServer = libs.serverTimestamp();
+          await libs.setDoc(ref, payload, { merge: false });
+          setItStatus('saved');
+        } catch (e) {
+          console.warn('IT report save failed:', e);
+          setItStatus('error');
+        }
+      }, 1200);
+    }
+
+    function setItStatus(s) {
+      const el = document.getElementById('itSaveStatus');
+      if (!el) return;
+      el.textContent = s === 'saving' ? 'Saving…' : s === 'saved' ? '☁ Saved' : s === 'error' ? '⚠ Save failed' : '';
+      el.className = 'it-save-status ' + s;
+    }
+
+    // ----- Rendering -----
+    function renderLoading() {
+      const c = document.getElementById('content');
+      c.innerHTML = '<div class="stats-empty" style="margin-top:40px;">Loading IT report…</div>';
+    }
+
+    function renderEditor() {
+      const c = document.getElementById('content');
+      const s = itState;
+      c.innerHTML = `
+        <div class="it-report-editor">
+          <div class="it-toolbar">
+            <div class="it-toolbar-left">
+              <label class="it-month-label">Report month</label>
+              <select id="itMonthPicker" class="month-picker" style="max-width:220px;"></select>
+              <span class="it-save-status" id="itSaveStatus"></span>
+            </div>
+            <div style="display:flex; gap:8px; align-items:center;">
+              <button class="btn-secondary btn-sm" id="itSeedAprilBtn" title="Load the original April 2026 report data into the April slot">Load April 2026 data</button>
+              <button class="btn-primary" id="itGenerateBtn">Generate Word Report</button>
+            </div>
+          </div>
+
+          <div class="help-banner">
+            <strong>Tazz Duff IT Monthly Report — ${escapeHtml(monthLabel(itMonth))}.</strong>
+            Edit any section below; changes auto-save and are kept in history. New months pre-fill the licence, cost and laptop tables from the previous month — just update what changed and fill in the activity log.
+          </div>
+
+          <!-- Header / meta -->
+          <div class="card">
+            <div class="card-header"><div class="card-title">Report Details</div></div>
+            <div class="field-row">
+              <div class="field"><label>Prepared by</label><input type="text" data-it="preparedBy" value="${escapeHtml(s.preparedBy)}" /></div>
+              <div class="field"><label>Department</label><input type="text" data-it="department" value="${escapeHtml(s.department)}" /></div>
+            </div>
+            <div class="field-row">
+              <div class="field"><label>Report status</label><input type="text" data-it="reportStatus" value="${escapeHtml(s.reportStatus)}" /></div>
+              <div class="field"><label>Working days logged</label><input type="text" data-it="workingDays" value="${escapeHtml(s.workingDays)}" placeholder="e.g. 17" /></div>
+            </div>
+          </div>
+
+          <!-- 1. Software Licence Register -->
+          <div class="card">
+            <div class="card-header">
+              <div class="card-title">1 · Software Licence Register</div>
+              <button class="add-btn-sm" data-it-add="licences">+ Add row</button>
+            </div>
+            <table class="it-table">
+              <thead><tr><th>Software / Service</th><th>Last Renewed</th><th>Next Expiry</th><th>Renewal Basis</th><th></th></tr></thead>
+              <tbody id="itLicencesBody"></tbody>
+            </table>
+          </div>
+
+          <!-- 2. Annual Software & Service Costs -->
+          <div class="card">
+            <div class="card-header">
+              <div class="card-title">2 · Annual Software &amp; Service Costs</div>
+              <button class="add-btn-sm" data-it-add="costs">+ Add row</button>
+            </div>
+            <table class="it-table">
+              <thead><tr><th>Service</th><th>Amount</th><th>Frequency</th><th></th></tr></thead>
+              <tbody id="itCostsBody"></tbody>
+            </table>
+          </div>
+
+          <!-- 2b. Office 365 by entity -->
+          <div class="card">
+            <div class="card-header">
+              <div class="card-title">2b · Microsoft Office 365 — by Entity</div>
+              <button class="add-btn-sm" data-it-add="office365">+ Add row</button>
+            </div>
+            <table class="it-table">
+              <thead><tr><th>Entity</th><th>Amount</th><th>Frequency</th><th></th></tr></thead>
+              <tbody id="itOffice365Body"></tbody>
+            </table>
+          </div>
+
+          <!-- 3. Laptop Replacement Programme -->
+          <div class="card">
+            <div class="card-header">
+              <div class="card-title">3 · Laptop Replacement Programme</div>
+              <button class="add-btn-sm" data-it-add="laptops">+ Add row</button>
+            </div>
+            <table class="it-table">
+              <thead><tr><th>Staff Member</th><th>Status</th><th></th></tr></thead>
+              <tbody id="itLaptopsBody"></tbody>
+            </table>
+          </div>
+
+          <!-- 4. Daily Activity Log -->
+          <div class="card">
+            <div class="card-header"><div class="card-title">4 · Daily Activity Log</div></div>
+            <label class="field-label-block">Standard daily routines (one per line — these appear in a box and are not repeated per date)</label>
+            <textarea data-it="standardRoutines" class="it-textarea" rows="4">${escapeHtml((s.standardRoutines || []).join('\n'))}</textarea>
+          </div>
+
+          <!-- Specific Activities by Date -->
+          <div class="card">
+            <div class="card-header">
+              <div class="card-title">Specific Activities by Date</div>
+              <button class="add-btn-sm" data-it-add="activities">+ Add date</button>
+            </div>
+            <p class="input-help" style="margin-top:0;">
+              For each date, enter one activity per line. You can paste a column straight from Excel — line breaks become separate bullet points in the report.
+            </p>
+            <div id="itActivitiesWrap"></div>
+          </div>
+
+          <div style="display:flex; justify-content:flex-end; gap:10px; margin: 20px 0 40px;">
+            <button class="btn-primary" id="itGenerateBtn2">Generate Word Report</button>
+          </div>
+        </div>
+      `;
+
+      renderLicences();
+      renderCosts();
+      renderOffice365();
+      renderLaptops();
+      renderActivities();
+      bindEditorEvents();
+      refreshMonthPicker();
+    }
+
+    async function refreshMonthPicker() {
+      const picker = document.getElementById('itMonthPicker');
+      if (!picker) return;
+      const stored = await listMonths();
+      const recent = [];
+      const now = new Date();
+      for (let i = 0; i < 18; i++) {
+        const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+        recent.push(`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`);
+      }
+      const all = [...new Set([...stored, ...recent])].sort().reverse();
+      picker.innerHTML = all.map(k => {
+        const isStored = stored.includes(k);
+        return `<option value="${k}" ${k === itMonth ? 'selected' : ''}>${monthLabel(k)}${isStored ? '' : ' (new)'}</option>`;
+      }).join('');
+      picker.onchange = () => load(picker.value);
+    }
+
+    function renderLicences() {
+      const body = document.getElementById('itLicencesBody');
+      if (!body) return;
+      body.innerHTML = (itState.licences || []).map((r, i) => `
+        <tr>
+          <td><input type="text" data-it-row="licences" data-i="${i}" data-f="name" value="${escapeHtml(r.name||'')}" /></td>
+          <td><input type="text" data-it-row="licences" data-i="${i}" data-f="lastRenewed" value="${escapeHtml(r.lastRenewed||'')}" /></td>
+          <td><input type="text" data-it-row="licences" data-i="${i}" data-f="nextExpiry" value="${escapeHtml(r.nextExpiry||'')}" /></td>
+          <td><input type="text" data-it-row="licences" data-i="${i}" data-f="basis" value="${escapeHtml(r.basis||'')}" /></td>
+          <td><button class="it-del" data-it-del="licences" data-i="${i}" title="Delete row">✕</button></td>
+        </tr>
+      `).join('') || `<tr><td colspan="5" class="pending" style="text-align:center;">No licences yet — click "+ Add row".</td></tr>`;
+    }
+    function renderCosts() {
+      const body = document.getElementById('itCostsBody');
+      if (!body) return;
+      body.innerHTML = (itState.costs || []).map((r, i) => `
+        <tr>
+          <td><input type="text" data-it-row="costs" data-i="${i}" data-f="name" value="${escapeHtml(r.name||'')}" /></td>
+          <td><input type="text" data-it-row="costs" data-i="${i}" data-f="amount" value="${escapeHtml(r.amount||'')}" /></td>
+          <td><input type="text" data-it-row="costs" data-i="${i}" data-f="frequency" value="${escapeHtml(r.frequency||'')}" /></td>
+          <td><button class="it-del" data-it-del="costs" data-i="${i}" title="Delete row">✕</button></td>
+        </tr>
+      `).join('') || `<tr><td colspan="4" class="pending" style="text-align:center;">No costs yet — click "+ Add row".</td></tr>`;
+    }
+    function renderOffice365() {
+      const body = document.getElementById('itOffice365Body');
+      if (!body) return;
+      body.innerHTML = (itState.office365 || []).map((r, i) => `
+        <tr>
+          <td><input type="text" data-it-row="office365" data-i="${i}" data-f="name" value="${escapeHtml(r.name||'')}" /></td>
+          <td><input type="text" data-it-row="office365" data-i="${i}" data-f="amount" value="${escapeHtml(r.amount||'')}" /></td>
+          <td><input type="text" data-it-row="office365" data-i="${i}" data-f="frequency" value="${escapeHtml(r.frequency||'')}" /></td>
+          <td><button class="it-del" data-it-del="office365" data-i="${i}" title="Delete row">✕</button></td>
+        </tr>
+      `).join('') || `<tr><td colspan="4" class="pending" style="text-align:center;">No entities yet — click "+ Add row".</td></tr>`;
+    }
+    function renderLaptops() {
+      const body = document.getElementById('itLaptopsBody');
+      if (!body) return;
+      body.innerHTML = (itState.laptops || []).map((r, i) => `
+        <tr>
+          <td><input type="text" data-it-row="laptops" data-i="${i}" data-f="name" value="${escapeHtml(r.name||'')}" /></td>
+          <td>
+            <select data-it-row="laptops" data-i="${i}" data-f="status">
+              <option value="Completed"   ${r.status==='Completed'?'selected':''}>Completed</option>
+              <option value="Outstanding" ${r.status==='Outstanding'?'selected':''}>Outstanding</option>
+              <option value="In progress"  ${r.status==='In progress'?'selected':''}>In progress</option>
+            </select>
+          </td>
+          <td><button class="it-del" data-it-del="laptops" data-i="${i}" title="Delete row">✕</button></td>
+        </tr>
+      `).join('') || `<tr><td colspan="3" class="pending" style="text-align:center;">No staff yet — click "+ Add row".</td></tr>`;
+    }
+    function renderActivities() {
+      const wrap = document.getElementById('itActivitiesWrap');
+      if (!wrap) return;
+      wrap.innerHTML = (itState.activities || []).map((a, i) => `
+        <div class="it-activity-row">
+          <div class="it-activity-date">
+            <input type="text" data-it-act="date" data-i="${i}" value="${escapeHtml(a.date||'')}" placeholder="01/04/2026" />
+            <button class="it-del" data-it-act-del="${i}" title="Delete this date">✕</button>
+          </div>
+          <textarea data-it-act="activities" data-i="${i}" class="it-textarea" rows="3" placeholder="One activity per line…">${escapeHtml((a.activities||[]).join('\n'))}</textarea>
+        </div>
+      `).join('') || `<div class="pending" style="padding:8px 0;">No dates yet — click "+ Add date", or paste your activity log.</div>`;
+    }
+
+    function bindEditorEvents() {
+      // Simple meta fields
+      document.querySelectorAll('[data-it]').forEach(el => {
+        el.addEventListener('input', e => {
+          const f = e.target.dataset.it;
+          if (f === 'standardRoutines') {
+            itState.standardRoutines = e.target.value.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+          } else {
+            itState[f] = e.target.value;
+          }
+          save();
+        });
+      });
+
+      // Table row field edits
+      document.querySelectorAll('[data-it-row]').forEach(el => {
+        const handler = e => {
+          const arr = e.target.dataset.itRow;
+          const i = Number(e.target.dataset.i);
+          const f = e.target.dataset.f;
+          if (itState[arr] && itState[arr][i]) {
+            itState[arr][i][f] = e.target.value;
+            save();
+          }
+        };
+        el.addEventListener('input', handler);
+        el.addEventListener('change', handler);
+      });
+
+      // Add-row buttons
+      document.querySelectorAll('[data-it-add]').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const arr = btn.dataset.itAdd;
+          if (!Array.isArray(itState[arr])) itState[arr] = [];
+          if (arr === 'activities') {
+            itState.activities.push({ date: '', activities: [] });
+            renderActivities();
+          } else if (arr === 'licences') {
+            itState.licences.push({ name:'', lastRenewed:'', nextExpiry:'', basis:'' });
+            renderLicences();
+          } else if (arr === 'costs') {
+            itState.costs.push({ name:'', amount:'', frequency:'' });
+            renderCosts();
+          } else if (arr === 'office365') {
+            itState.office365.push({ name:'', amount:'', frequency:'' });
+            renderOffice365();
+          } else if (arr === 'laptops') {
+            itState.laptops.push({ name:'', status:'Outstanding' });
+            renderLaptops();
+          }
+          bindEditorEvents();
+          save();
+        });
+      });
+
+      // Delete-row buttons
+      document.querySelectorAll('[data-it-del]').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const arr = btn.dataset.itDel;
+          const i = Number(btn.dataset.i);
+          itState[arr].splice(i, 1);
+          if (arr === 'licences') renderLicences();
+          else if (arr === 'costs') renderCosts();
+          else if (arr === 'office365') renderOffice365();
+          else if (arr === 'laptops') renderLaptops();
+          bindEditorEvents();
+          save();
+        });
+      });
+
+      // Activity date + textarea
+      document.querySelectorAll('[data-it-act]').forEach(el => {
+        el.addEventListener('input', e => {
+          const f = e.target.dataset.itAct;
+          const i = Number(e.target.dataset.i);
+          if (!itState.activities[i]) return;
+          if (f === 'date') itState.activities[i].date = e.target.value;
+          else if (f === 'activities') itState.activities[i].activities = e.target.value.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+          save();
+        });
+      });
+      document.querySelectorAll('[data-it-act-del]').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const i = Number(btn.dataset.itActDel);
+          itState.activities.splice(i, 1);
+          renderActivities();
+          bindEditorEvents();
+          save();
+        });
+      });
+
+      // Generate buttons (two of them, top + bottom)
+      ['itGenerateBtn', 'itGenerateBtn2'].forEach(id => {
+        const b = document.getElementById(id);
+        if (b) b.addEventListener('click', generateWord);
+      });
+
+      // Load April 2026 seed data
+      const seedBtn = document.getElementById('itSeedAprilBtn');
+      if (seedBtn) seedBtn.addEventListener('click', seedApril);
+    }
+
+    // ----- Word generation -----
+    async function generateWord() {
+      const btns = ['itGenerateBtn', 'itGenerateBtn2'].map(id => document.getElementById(id)).filter(Boolean);
+      btns.forEach(b => { b.disabled = true; b.textContent = 'Generating…'; });
+      try {
+        const docx = await loadDocxLib();
+        const doc = buildItDocx(docx);
+        const blob = await docx.Packer.toBlob(doc);
+        const filename = `Tazz_Duff_IT_Monthly_Report_${itMonth}.docx`;
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url; a.download = filename;
+        document.body.appendChild(a); a.click(); document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        toast(`Generated ${filename}`);
+      } catch (e) {
+        console.error(e);
+        toast('Generation failed: ' + e.message, true);
+      } finally {
+        btns.forEach(b => { b.disabled = false; b.textContent = 'Generate Word Report'; });
+      }
+    }
+
+    function buildItDocx(docx) {
+      const { Document, Packer, Paragraph, TextRun, Table, TableRow, TableCell, ImageRun,
+              Footer, AlignmentType, BorderStyle, WidthType, ShadingType, VerticalAlign, PageNumber } = docx;
+      const s = itState;
+      const border = { style: BorderStyle.SINGLE, size: 4, color: BORDER };
+      const cellBorders = { top: border, bottom: border, left: border, right: border };
+      const noBorder = { style: BorderStyle.NONE, size: 0, color: "FFFFFF" };
+      const noBorders = { top: noBorder, bottom: noBorder, left: noBorder, right: noBorder };
+
+      const p = (text, opts = {}) => new Paragraph({
+        alignment: opts.align, spacing: opts.spacing || { before: 0, after: 0 }, indent: opts.indent,
+        children: [new TextRun({ text, bold: opts.bold, italics: opts.italic, color: opts.color, size: opts.size || 20, font: "Calibri" })],
+      });
+      const spacer = (sp = 120) => new Paragraph({ spacing: { before: 0, after: sp }, children: [new TextRun("")] });
+      const sectionHeading = (text) => new Paragraph({
+        spacing: { before: 320, after: 140 },
+        border: { bottom: { style: BorderStyle.SINGLE, size: 12, color: ACCENT, space: 4 } },
+        children: [new TextRun({ text: text.toUpperCase(), bold: true, color: NAVY, size: 26, font: "Calibri", characterSpacing: 30 })],
+      });
+
+      const hCell = (text, w) => new TableCell({
+        width: { size: w, type: WidthType.DXA }, borders: cellBorders,
+        shading: { fill: ROW_HDR, type: ShadingType.CLEAR },
+        margins: { top: 80, bottom: 80, left: 120, right: 120 },
+        children: [p(text, { bold: true, color: "FFFFFF", size: 19 })],
+      });
+      const bCell = (text, w, opts = {}) => new TableCell({
+        width: { size: w, type: WidthType.DXA }, borders: cellBorders,
+        shading: opts.fill ? { fill: opts.fill, type: ShadingType.CLEAR } : undefined,
+        margins: { top: 70, bottom: 70, left: 120, right: 120 },
+        children: [p(text, { bold: opts.bold, color: opts.color, size: 19, align: opts.align })],
+      });
+
+      // Table builders
+      const makeTable = (cols, headers, rows) => new Table({
+        width: { size: 9360, type: WidthType.DXA }, columnWidths: cols,
+        rows: [
+          new TableRow({ tableHeader: true, children: headers.map((h, i) => hCell(h, cols[i])) }),
+          ...rows.map((r, ri) => new TableRow({
+            children: r.map((cell, ci) => bCell(cell, cols[ci], { fill: ri % 2 ? ROW_ALT : "FFFFFF", bold: ci === 0 })),
+          })),
+        ],
+      });
+
+      const children = [];
+
+      // Header band with logo
+      children.push(new Table({
+        width: { size: 9360, type: WidthType.DXA }, columnWidths: [1100, 8260],
+        rows: [new TableRow({ children: [
+          new TableCell({ width: { size: 1100, type: WidthType.DXA }, borders: noBorders, verticalAlign: VerticalAlign.CENTER,
+            children: [new Paragraph({ children: [new ImageRun({ data: b64ToBytes(LOGO_B64), transformation: { width: 56, height: 56 }, type: "jpg" })] })] }),
+          new TableCell({ width: { size: 8260, type: WidthType.DXA }, borders: noBorders, verticalAlign: VerticalAlign.CENTER,
+            children: [
+              p("UBUNTU RESOURCE MANAGEMENT (PTY) LTD", { bold: true, color: NAVY, size: 24, characterSpacing: 20 }),
+              p("IT Department  •  Monthly Service Report", { color: MUTED, size: 18 }),
+            ] }),
+        ]})],
+      }));
+      children.push(spacer(200));
+
+      // Title
+      children.push(new Paragraph({ spacing: { before: 0, after: 40 }, children: [new TextRun({ text: "Monthly IT Service Report", bold: true, color: NAVY_DARK, size: 44, font: "Calibri" })] }));
+      children.push(p(`Reporting Period: ${monthLabel(itMonth)}`, { bold: true, color: ACCENT, size: 24, spacing: { before: 0, after: 200 } }));
+
+      // Details table
+      children.push(new Table({
+        width: { size: 9360, type: WidthType.DXA }, columnWidths: [2340, 2340, 2340, 2340],
+        rows: [
+          new TableRow({ children: [
+            bCell("Prepared by", 2340, { fill: ROW_ALT, bold: true }), bCell(s.preparedBy || '', 2340),
+            bCell("Department", 2340, { fill: ROW_ALT, bold: true }), bCell(s.department || '', 2340),
+          ]}),
+          new TableRow({ children: [
+            bCell("Reporting period", 2340, { fill: ROW_ALT, bold: true }), bCell(periodLabel(itMonth), 2340),
+            bCell("Report status", 2340, { fill: ROW_ALT, bold: true }), bCell(s.reportStatus || '', 2340),
+          ]}),
+        ],
+      }));
+      children.push(spacer(200));
+
+      // Stat boxes
+      const statCell = (value, label) => new TableCell({
+        width: { size: 3120, type: WidthType.DXA }, borders: cellBorders,
+        shading: { fill: ROW_ALT, type: ShadingType.CLEAR },
+        margins: { top: 140, bottom: 140, left: 120, right: 120 }, verticalAlign: VerticalAlign.CENTER,
+        children: [
+          new Paragraph({ alignment: AlignmentType.CENTER, spacing: { after: 40 }, children: [new TextRun({ text: String(value || '—'), bold: true, color: NAVY_DARK, size: 44, font: "Calibri" })] }),
+          new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: label, color: MUTED, size: 16, characterSpacing: 30, font: "Calibri" })] }),
+        ],
+      });
+      const totalActivities = (s.activities || []).reduce((acc, a) => acc + (a.activities ? a.activities.length : 0), 0);
+      children.push(new Table({
+        width: { size: 9360, type: WidthType.DXA }, columnWidths: [3120, 3120, 3120],
+        rows: [new TableRow({ children: [
+          statCell(s.workingDays, "WORKING DAYS LOGGED"),
+          statCell(totalActivities, "SPECIFIC ACTIVITIES"),
+          statCell((s.licences || []).length, "LICENCES TRACKED"),
+        ]})],
+      }));
+
+      // 1. Software Licence Register
+      if ((s.licences || []).length) {
+        children.push(sectionHeading("1.  Software Licence Register"));
+        children.push(p("The table below lists all software licences and service subscriptions currently maintained by the IT department, together with the most recent renewal date and the next expiry date.", { color: SLATE, spacing: { after: 140 } }));
+        children.push(makeTable([3000, 1800, 1800, 2760], ["Software / Service", "Last Renewed", "Next Expiry", "Renewal Basis"],
+          s.licences.map(r => [r.name||'', r.lastRenewed||'', r.nextExpiry||'', r.basis||''])));
+      }
+
+      // 2. Annual Software & Service Costs
+      if ((s.costs || []).length || (s.office365 || []).length) {
+        children.push(sectionHeading("2.  Annual Software & Service Costs"));
+        children.push(p("Recurring expenditure on software licences and IT services, listed by entity where applicable.", { color: SLATE, spacing: { after: 140 } }));
+        if ((s.costs || []).length) {
+          children.push(makeTable([4680, 2340, 2340], ["Service", "Amount", "Frequency"],
+            s.costs.map(r => [r.name||'', r.amount||'', r.frequency||''])));
+          children.push(spacer(160));
+        }
+        if ((s.office365 || []).length) {
+          children.push(makeTable([4680, 2340, 2340], ["Microsoft Office 365 – Entity", "Amount", "Frequency"],
+            s.office365.map(r => [r.name||'', r.amount||'', r.frequency||''])));
+        }
+      }
+
+      // 3. Laptop Replacement Programme
+      if ((s.laptops || []).length) {
+        children.push(sectionHeading("3.  Laptop Replacement Programme – " + (itMonth ? itMonth.split('-')[0] : '')));
+        children.push(p("Status of the staff laptop replacement initiative.", { color: SLATE, spacing: { after: 140 } }));
+        children.push(makeTable([5460, 3900], ["Staff Member", "Status"],
+          s.laptops.map(r => [r.name||'', r.status||''])));
+      }
+
+      // 4. Daily Activity Log
+      children.push(sectionHeading("4.  Daily Activity Log"));
+      children.push(p("This log records specific support and project activities undertaken during the month. Standard daily routines (set out below) are performed every working day and are therefore not repeated against each date.", { color: SLATE, spacing: { after: 140 } }));
+
+      // Standard routines box
+      if ((s.standardRoutines || []).length) {
+        const routineParas = [
+          p("Standard Daily Routines", { bold: true, color: NAVY_DARK, size: 20, spacing: { after: 40 } }),
+          p("The following tasks are performed every working day and are not repeated in the activity log below:", { italic: true, color: MUTED, size: 18, spacing: { after: 80 } }),
+        ];
+        for (const r of s.standardRoutines) routineParas.push(p("▸  " + r, { color: SLATE, size: 19, spacing: { after: 30 } }));
+        children.push(new Table({
+          width: { size: 9360, type: WidthType.DXA }, columnWidths: [9360],
+          rows: [new TableRow({ children: [new TableCell({
+            width: { size: 9360, type: WidthType.DXA }, borders: cellBorders,
+            shading: { fill: ROW_ALT, type: ShadingType.CLEAR },
+            margins: { top: 120, bottom: 120, left: 160, right: 160 },
+            children: routineParas,
+          })]})],
+        }));
+        children.push(spacer(160));
+      }
+
+      // Specific Activities by Date
+      if ((s.activities || []).length) {
+        children.push(p("Specific Activities by Date", { bold: true, color: NAVY_DARK, size: 22, spacing: { before: 120, after: 120 } }));
+        const actRows = s.activities.filter(a => a.date || (a.activities && a.activities.length)).map((a, ri) => {
+          const actParas = (a.activities || []).map(line => p("▸  " + line, { color: SLATE, size: 19, spacing: { after: 30 } }));
+          if (actParas.length === 0) actParas.push(p("", { size: 19 }));
+          return new TableRow({ children: [
+            new TableCell({ width: { size: 1800, type: WidthType.DXA }, borders: cellBorders,
+              shading: { fill: ri % 2 ? ROW_ALT : "FFFFFF", type: ShadingType.CLEAR },
+              margins: { top: 70, bottom: 70, left: 120, right: 120 }, verticalAlign: VerticalAlign.TOP,
+              children: [p(a.date || '', { bold: true, color: NAVY_DARK, size: 19 })] }),
+            new TableCell({ width: { size: 7560, type: WidthType.DXA }, borders: cellBorders,
+              shading: { fill: ri % 2 ? ROW_ALT : "FFFFFF", type: ShadingType.CLEAR },
+              margins: { top: 70, bottom: 70, left: 120, right: 120 },
+              children: actParas }),
+          ]});
+        });
+        children.push(new Table({
+          width: { size: 9360, type: WidthType.DXA }, columnWidths: [1800, 7560],
+          rows: [
+            new TableRow({ tableHeader: true, children: [hCell("Date", 1800), hCell("Specific Activities", 7560)] }),
+            ...actRows,
+          ],
+        }));
+      }
+
+      children.push(spacer(200));
+      children.push(p("— End of Report —", { italic: true, color: MUTED, align: AlignmentType.CENTER, size: 18 }));
+
+      const docFooter = new Footer({ children: [new Paragraph({
+        alignment: AlignmentType.CENTER, border: { top: { style: BorderStyle.SINGLE, size: 4, color: SOFT_LINE, space: 6 } },
+        children: [new TextRun({ text: `Ubuntu Resource Management (Pty) Ltd  |  IT Monthly Service Report  |  ${monthLabel(itMonth)}`, color: MUTED, size: 15, font: "Calibri" })],
+      })]});
+
+      return new Document({
+        creator: "Ubuntu Resource Management",
+        title: `Tazz Duff IT Monthly Report - ${itMonth}`,
+        styles: { default: { document: { run: { font: "Calibri", size: 20 } } } },
+        sections: [{
+          properties: { page: { size: { width: 12240, height: 15840 }, margin: { top: 1080, right: 1440, bottom: 1080, left: 1440 } } },
+          footers: { default: docFooter },
+          children,
+        }],
+      });
+    }
+
+    return { open, load, seedApril };
+  })();
 
   // ============================================================
   //  EVENTS & INIT

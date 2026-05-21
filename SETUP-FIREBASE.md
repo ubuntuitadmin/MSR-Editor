@@ -116,6 +116,11 @@ service cloud.firestore {
       allow read:  if isAdmin() || isOwner(email);
       allow write: if isAdmin();
     }
+
+    // IT monthly reports — admin-only (Tazz Duff IT Monthly Report).
+    match /it-reports/{month} {
+      allow read, write: if isAdmin();
+    }
   }
 }
 ```
