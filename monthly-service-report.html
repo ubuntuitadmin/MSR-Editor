@@ -5788,106 +5788,122 @@
       `).join('') || `<div class="pending" style="padding:8px 0;">No dates yet — click "+ Add date", or paste your activity log.</div>`;
     }
 
+    // Bind ALL editor interactions via event delegation on the single editor
+    // container. Because we attach listeners to the container (which is created
+    // exactly once per renderEditor) rather than to individual buttons/inputs,
+    // re-rendering a table body never stacks duplicate listeners. This is the
+    // fix for the "one click adds many rows" bug.
     function bindEditorEvents() {
-      // Simple meta fields
-      document.querySelectorAll('[data-it]').forEach(el => {
-        el.addEventListener('input', e => {
-          const f = e.target.dataset.it;
+      const root = document.querySelector('.it-report-editor');
+      if (!root) return;
+      // Guard: only attach the delegated listeners once per container instance.
+      if (root.dataset.bound === '1') return;
+      root.dataset.bound = '1';
+
+      // ----- INPUT events (typing in fields) -----
+      root.addEventListener('input', e => {
+        const t = e.target;
+
+        // Simple meta fields
+        if (t.dataset.it !== undefined) {
+          const f = t.dataset.it;
           if (f === 'standardRoutines') {
-            itState.standardRoutines = e.target.value.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+            itState.standardRoutines = t.value.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
           } else {
-            itState[f] = e.target.value;
+            itState[f] = t.value;
           }
           save();
-        });
-      });
+          return;
+        }
 
-      // Table row field edits
-      document.querySelectorAll('[data-it-row]').forEach(el => {
-        const handler = e => {
-          const arr = e.target.dataset.itRow;
-          const i = Number(e.target.dataset.i);
-          const f = e.target.dataset.f;
+        // Table row field edits (licences / costs / office365 / laptops)
+        if (t.dataset.itRow !== undefined) {
+          const arr = t.dataset.itRow;
+          const i = Number(t.dataset.i);
+          const f = t.dataset.f;
           if (itState[arr] && itState[arr][i]) {
-            itState[arr][i][f] = e.target.value;
+            itState[arr][i][f] = t.value;
             save();
           }
-        };
-        el.addEventListener('input', handler);
-        el.addEventListener('change', handler);
-      });
+          return;
+        }
 
-      // Add-row buttons
-      document.querySelectorAll('[data-it-add]').forEach(btn => {
-        btn.addEventListener('click', () => {
-          const arr = btn.dataset.itAdd;
-          if (!Array.isArray(itState[arr])) itState[arr] = [];
-          if (arr === 'activities') {
-            itState.activities.push({ date: '', activities: [] });
-            renderActivities();
-          } else if (arr === 'licences') {
-            itState.licences.push({ name:'', lastRenewed:'', nextExpiry:'', basis:'' });
-            renderLicences();
-          } else if (arr === 'costs') {
-            itState.costs.push({ name:'', amount:'', frequency:'' });
-            renderCosts();
-          } else if (arr === 'office365') {
-            itState.office365.push({ name:'', amount:'', frequency:'' });
-            renderOffice365();
-          } else if (arr === 'laptops') {
-            itState.laptops.push({ name:'', status:'Outstanding' });
-            renderLaptops();
-          }
-          bindEditorEvents();
+        // Activity date + textarea
+        if (t.dataset.itAct !== undefined) {
+          const f = t.dataset.itAct;
+          const i = Number(t.dataset.i);
+          if (!itState.activities[i]) return;
+          if (f === 'date') itState.activities[i].date = t.value;
+          else if (f === 'activities') itState.activities[i].activities = t.value.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
           save();
-        });
+          return;
+        }
       });
 
-      // Delete-row buttons
-      document.querySelectorAll('[data-it-del]').forEach(btn => {
-        btn.addEventListener('click', () => {
-          const arr = btn.dataset.itDel;
-          const i = Number(btn.dataset.i);
+      // ----- CHANGE events (select dropdowns, e.g. laptop status) -----
+      root.addEventListener('change', e => {
+        const t = e.target;
+        if (t.dataset.itRow !== undefined) {
+          const arr = t.dataset.itRow;
+          const i = Number(t.dataset.i);
+          const f = t.dataset.f;
+          if (itState[arr] && itState[arr][i]) {
+            itState[arr][i][f] = t.value;
+            save();
+          }
+        }
+      });
+
+      // ----- CLICK events (add / delete / generate / seed) -----
+      root.addEventListener('click', e => {
+        const addBtn = e.target.closest('[data-it-add]');
+        if (addBtn) {
+          const arr = addBtn.dataset.itAdd;
+          if (!Array.isArray(itState[arr])) itState[arr] = [];
+          if (arr === 'activities')      { itState.activities.push({ date: '', activities: [] }); renderActivities(); }
+          else if (arr === 'licences')   { itState.licences.push({ name:'', lastRenewed:'', nextExpiry:'', basis:'' }); renderLicences(); }
+          else if (arr === 'costs')      { itState.costs.push({ name:'', amount:'', frequency:'' }); renderCosts(); }
+          else if (arr === 'office365')  { itState.office365.push({ name:'', amount:'', frequency:'' }); renderOffice365(); }
+          else if (arr === 'laptops')    { itState.laptops.push({ name:'', status:'Outstanding' }); renderLaptops(); }
+          save();
+          return;
+        }
+
+        const delBtn = e.target.closest('[data-it-del]');
+        if (delBtn) {
+          const arr = delBtn.dataset.itDel;
+          const i = Number(delBtn.dataset.i);
           itState[arr].splice(i, 1);
           if (arr === 'licences') renderLicences();
           else if (arr === 'costs') renderCosts();
           else if (arr === 'office365') renderOffice365();
           else if (arr === 'laptops') renderLaptops();
-          bindEditorEvents();
           save();
-        });
-      });
+          return;
+        }
 
-      // Activity date + textarea
-      document.querySelectorAll('[data-it-act]').forEach(el => {
-        el.addEventListener('input', e => {
-          const f = e.target.dataset.itAct;
-          const i = Number(e.target.dataset.i);
-          if (!itState.activities[i]) return;
-          if (f === 'date') itState.activities[i].date = e.target.value;
-          else if (f === 'activities') itState.activities[i].activities = e.target.value.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
-          save();
-        });
-      });
-      document.querySelectorAll('[data-it-act-del]').forEach(btn => {
-        btn.addEventListener('click', () => {
-          const i = Number(btn.dataset.itActDel);
+        const actDelBtn = e.target.closest('[data-it-act-del]');
+        if (actDelBtn) {
+          const i = Number(actDelBtn.dataset.itActDel);
           itState.activities.splice(i, 1);
           renderActivities();
-          bindEditorEvents();
           save();
-        });
+          return;
+        }
+
+        if (e.target.closest('#itGenerateBtn') || e.target.closest('#itGenerateBtn2')) {
+          generateWord();
+          return;
+        }
+        if (e.target.closest('#itSeedAprilBtn')) {
+          seedApril();
+          return;
+        }
       });
 
-      // Generate buttons (two of them, top + bottom)
-      ['itGenerateBtn', 'itGenerateBtn2'].forEach(id => {
-        const b = document.getElementById(id);
-        if (b) b.addEventListener('click', generateWord);
-      });
-
-      // Load April 2026 seed data
-      const seedBtn = document.getElementById('itSeedAprilBtn');
-      if (seedBtn) seedBtn.addEventListener('click', seedApril);
+      // Month picker is outside the row tables but inside the container — bind directly.
+      const picker = document.getElementById('itMonthPicker');
+      if (picker) picker.onchange = () => load(picker.value);
     }
 
     // ----- Word generation -----
