@@ -581,7 +581,7 @@
 
   .trip-list-header {
     display: grid;
-    grid-template-columns: 100px minmax(140px, 1.6fr) 76px 76px 90px 90px 76px minmax(120px, 1.8fr) 70px;
+    grid-template-columns: 100px minmax(140px, 1.6fr) 110px 110px 90px 90px 76px minmax(110px, 1.5fr) 70px;
     gap: 6px;
     padding: 8px 10px;
     font-size: 10px;
@@ -594,7 +594,7 @@
   }
   .trip-row {
     display: grid;
-    grid-template-columns: 100px minmax(140px, 1.6fr) 76px 76px 90px 90px 76px minmax(120px, 1.8fr) 70px;
+    grid-template-columns: 100px minmax(140px, 1.6fr) 110px 110px 90px 90px 76px minmax(110px, 1.5fr) 70px;
     gap: 6px;
     padding: 6px 8px;
     background: var(--cream);
@@ -1791,6 +1791,7 @@
   const REGIONS = [
     { code: 'GP',  name: 'Gauteng' },
     { code: 'KZN', name: 'KwaZulu-Natal' },
+    { code: 'WC',  name: 'Western Cape' },
   ];
 
   const CCMA_VENUES = [
@@ -1804,6 +1805,8 @@
     { id: 'kzn-newcastle',       region: 'KZN', shortName: 'Newcastle',        fullName: 'CCMA - Newcastle' },
     { id: 'kzn-richards-bay',    region: 'KZN', shortName: 'Richards Bay',     fullName: 'CCMA - Richards Bay' },
     { id: 'kzn-port-shepstone',  region: 'KZN', shortName: 'Port Shepstone',   fullName: 'CCMA - Port Shepstone' },
+    // Western Cape
+    { id: 'wc-cape-town',        region: 'WC',  shortName: 'Cape Town',        fullName: 'CCMA - Cape Town' },
   ];
   const BC_VENUES = [
     // Gauteng
@@ -4095,8 +4098,8 @@
           <div class="trip-list-header">
             <div>Date</div>
             <div>Client / Destination</div>
-            <div>Out</div>
-            <div>Back</div>
+            <div>Arrived at Client</div>
+            <div>Left the Client</div>
             <div>Odo Start</div>
             <div>Odo End</div>
             <div>KM</div>
@@ -4316,8 +4319,8 @@
           <div class="trip-list-header">
             <div>Date</div>
             <div>Client Represented</div>
-            <div>Out</div>
-            <div>Back</div>
+            <div>Arrived at Client</div>
+            <div>Left the Client</div>
             <div>Odo Start</div>
             <div>Odo End</div>
             <div>KM</div>
@@ -4950,18 +4953,18 @@
       const totals = tripTotals(trips);
       const tripLogTable = new Table({
         width: { size: 9360, type: WidthType.DXA },
-        columnWidths: [1000, 2000, 880, 880, 1080, 880, 2640],
+        columnWidths: [1000, 2000, 1180, 1180, 1080, 880, 2040],
         rows: [
           new TableRow({
             tableHeader: true,
             children: [
               headerCell("Date", 1000),
               headerCell("Client / Destination", 2000),
-              headerCell("Out", 880),
-              headerCell("Back", 880),
+              headerCell("Arrived at Client", 1180),
+              headerCell("Left the Client", 1180),
               headerCell("Hrs", 1080),
               headerCell("KM", 880),
-              headerCell("Notes", 2640),
+              headerCell("Notes", 2040),
             ],
           }),
           ...trips.map((t, i) => {
@@ -4973,11 +4976,11 @@
               children: [
                 bodyCell(t.date || "—",     1000, { fill, bold: true, color: NAVY, valign: VerticalAlign.TOP }),
                 bodyCell(t.client || "—",   2000, { fill, valign: VerticalAlign.TOP }),
-                bodyCell(t.timeOut || "—",  880,  { fill, valign: VerticalAlign.TOP, align: AlignmentType.CENTER }),
-                bodyCell(t.timeBack || "—", 880,  { fill, valign: VerticalAlign.TOP, align: AlignmentType.CENTER }),
+                bodyCell(t.timeOut || "—",  1180,  { fill, valign: VerticalAlign.TOP, align: AlignmentType.CENTER }),
+                bodyCell(t.timeBack || "—", 1180,  { fill, valign: VerticalAlign.TOP, align: AlignmentType.CENTER }),
                 bodyCell(dur === null ? "—" : fmtDuration(dur), 1080, { fill, valign: VerticalAlign.TOP, align: AlignmentType.CENTER }),
                 bodyCell(km ? km.toLocaleString('en-ZA', { maximumFractionDigits: 1 }) : "—", 880, { fill, valign: VerticalAlign.TOP, align: AlignmentType.RIGHT, bold: true }),
-                bodyCell(t.notes || "",     2640, { fill, valign: VerticalAlign.TOP }),
+                bodyCell(t.notes || "",     2040, { fill, valign: VerticalAlign.TOP }),
               ],
             });
           }),
@@ -5017,18 +5020,18 @@
       const tot = tripTotals(entries);
       return new Table({
         width: { size: 9360, type: WidthType.DXA },
-        columnWidths: [1000, 2000, 880, 880, 1080, 880, 2640],
+        columnWidths: [1000, 2000, 1180, 1180, 1080, 880, 2040],
         rows: [
           new TableRow({
             tableHeader: true,
             children: [
               headerCell("Date", 1000),
               headerCell(clientHeader, 2000),
-              headerCell("Out", 880),
-              headerCell("Back", 880),
+              headerCell("Arrived at Client", 1180),
+              headerCell("Left the Client", 1180),
               headerCell("Hrs", 1080),
               headerCell("KM", 880),
-              headerCell("Notes", 2640),
+              headerCell("Notes", 2040),
             ],
           }),
           ...entries.map((t, i) => {
@@ -5040,11 +5043,11 @@
               children: [
                 bodyCell(t.date || "—",     1000, { fill, bold: true, color: NAVY, valign: VerticalAlign.TOP }),
                 bodyCell(t.client || "—",   2000, { fill, valign: VerticalAlign.TOP }),
-                bodyCell(t.timeOut || "—",  880,  { fill, valign: VerticalAlign.TOP, align: AlignmentType.CENTER }),
-                bodyCell(t.timeBack || "—", 880,  { fill, valign: VerticalAlign.TOP, align: AlignmentType.CENTER }),
+                bodyCell(t.timeOut || "—",  1180,  { fill, valign: VerticalAlign.TOP, align: AlignmentType.CENTER }),
+                bodyCell(t.timeBack || "—", 1180,  { fill, valign: VerticalAlign.TOP, align: AlignmentType.CENTER }),
                 bodyCell(dur === null ? "—" : fmtDuration(dur), 1080, { fill, valign: VerticalAlign.TOP, align: AlignmentType.CENTER }),
                 bodyCell(km ? km.toLocaleString('en-ZA', { maximumFractionDigits: 1 }) : "—", 880, { fill, valign: VerticalAlign.TOP, align: AlignmentType.RIGHT, bold: true }),
-                bodyCell(t.notes || "",     2640, { fill, valign: VerticalAlign.TOP }),
+                bodyCell(t.notes || "",     2040, { fill, valign: VerticalAlign.TOP }),
               ],
             });
           }),
