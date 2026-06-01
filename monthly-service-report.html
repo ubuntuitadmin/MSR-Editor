@@ -2347,6 +2347,22 @@
         // Use device language for sign-in UI
         try { auth.useDeviceLanguage(); } catch (e) {}
 
+        // If the user just came back from Google's sign-in page (via redirect),
+        // complete that flow before wiring the rest of the UI. onAuthStateChanged
+        // will fire with the resulting user.
+        try {
+          if (typeof firebaseLibs.getRedirectResult === 'function') {
+            await firebaseLibs.getRedirectResult(auth);
+          }
+        } catch (e) {
+          console.warn('Redirect sign-in completion error:', e);
+          // Surface a friendly message; the auth state listener below will still
+          // run and either keep us signed out or pick up a successful sign-in.
+          if (e && e.code && e.code !== 'auth/no-auth-event') {
+            showSignInError(e.message || 'Sign-in was interrupted. Please try again.');
+          }
+        }
+
         // Listen for auth state changes (sign-in / sign-out / page-load resumption)
         firebaseLibs.onAuthStateChanged(auth, onAuthChange);
 
@@ -2381,13 +2397,46 @@
       window.addEventListener('offline', () => setStatus('offline'));
     }
 
+    // True on phones / tablets where popup-based sign-in is unreliable
+    // (especially iOS Safari, which blocks popups very aggressively, and
+    // PWAs/in-app browsers where popups don't work at all).
+    function isMobileDevice() {
+      const ua = navigator.userAgent || '';
+      // Catch iPhone/iPad/iPod plus Android, and also iPadOS which now
+      // reports as Mac but with touch support.
+      if (/iPhone|iPad|iPod|Android|Mobile/i.test(ua)) return true;
+      if (navigator.maxTouchPoints > 1 && /Macintosh/.test(ua)) return true;
+      return false;
+    }
+
     // ----- Authentication -----
     async function signIn() {
       try {
         setStatus('loading'); updatePillUI();
         const provider = new firebaseLibs.GoogleAuthProvider();
-        await firebaseLibs.signInWithPopup(auth, provider);
-        // onAuthChange will fire next
+
+        // On mobile devices, popup sign-in is unreliable (iOS Safari blocks it,
+        // some in-app browsers ignore it). Use full-page redirect instead.
+        if (isMobileDevice()) {
+          await firebaseLibs.signInWithRedirect(auth, provider);
+          // The browser navigates away; control returns when Google redirects
+          // back to this page and getRedirectResult() runs during init().
+          return;
+        }
+
+        // Desktop: popup is a nicer UX. If it's blocked for any reason
+        // (popup-blocker, embedded view, etc.), fall back to redirect.
+        try {
+          await firebaseLibs.signInWithPopup(auth, provider);
+        } catch (popupErr) {
+          const code = popupErr && popupErr.code;
+          if (code === 'auth/popup-blocked' || code === 'auth/popup-closed-by-user' || code === 'auth/operation-not-supported-in-this-environment') {
+            // Fall back to redirect
+            await firebaseLibs.signInWithRedirect(auth, provider);
+            return;
+          }
+          throw popupErr;
+        }
       } catch (e) {
         console.warn('Sign-in failed:', e);
         showSignInError(e.message || 'Sign-in was cancelled or failed. Please try again.');
