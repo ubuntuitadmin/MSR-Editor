@@ -2465,12 +2465,70 @@
 
     // ----- Loading a specific consultant's month -----
     // Used by both consultants (their own) and admins (drilling into someone)
+    // Build a fresh state for a month that doesn't yet have a stored report.
+    // Carries forward each client's identity (name, contact, tel, headCount,
+    // frequency, type) from the consultant's most recent prior month, but
+    // resets all per-month activity (visits, discipline/followup/admin/
+    // additional notes) so the consultant starts the month with a clean slate.
+    async function buildFreshMonthFromRoster(email, monthKey) {
+      const fresh = JSON.parse(JSON.stringify(DEFAULT_STATE));
+      fresh._month = monthKey;
+      fresh._owner = email;
+      try {
+        // Find the most recent month with stored data for this consultant
+        const months = await listConsultantMonths(email);
+        const priorMonths = months.filter(m => m < monthKey).sort().reverse();
+        if (priorMonths.length === 0) return fresh; // no prior data — blank start
+
+        const priorMonth = priorMonths[0];
+        const priorRef = firebaseLibs.doc(db, 'users', email, 'reports', priorMonth);
+        const priorSnap = await firebaseLibs.getDoc(priorRef);
+        if (!priorSnap.exists()) return fresh;
+        const prior = priorSnap.data();
+
+        // Carry forward only the IDENTITY fields of each client.
+        // Activity (visits, notes) is per-month and starts fresh.
+        const noteDefault = ['Not at this time.'];
+        if (Array.isArray(prior.clients)) {
+          fresh.clients = prior.clients.map(c => ({
+            name:      c.name      || '',
+            contact:   c.contact   || '',
+            tel:       c.tel       || '',
+            headCount: c.headCount || '',
+            frequency: c.frequency || '',
+            type:      c.type      || '',
+            // Per-month activity reset to defaults
+            visits: [],
+            discipline: noteDefault.slice(),
+            followup:   noteDefault.slice(),
+            admin:      noteDefault.slice(),
+            additional: noteDefault.slice(),
+          }));
+        }
+      } catch (e) {
+        console.warn('buildFreshMonthFromRoster failed:', e);
+      }
+      return fresh;
+    }
+
     async function loadMonth(monthKey, targetEmail) {
       const email = targetEmail || viewingEmail || (currentUser && currentUser.email);
       if (!email || !monthKey) return;
+      const switchedMonth = (currentMonth !== monthKey) || (viewingEmail !== email);
       currentMonth = monthKey;
       viewingEmail = email;
       setStatus('loading'); updatePillUI();
+
+      // Show an immediate "Loading…" placeholder so the user never sees stale
+      // or blank content while the Firestore snapshot is in flight. The real
+      // render will happen automatically when applyRemoteState fires.
+      if (switchedMonth) {
+        const c = document.getElementById('content');
+        if (c) c.innerHTML = '<div class="stats-empty" style="margin-top:40px;">Loading ' + escapeHtml(monthKey) + '…</div>';
+        // Also clear the stale invalidation timestamp so the next snapshot is
+        // never mistaken for our own echo (which would suppress the render).
+        lastWriteTimestamp = 0;
+      }
 
       // Tear down any previous live subscription
       if (unsubReport) { unsubReport(); unsubReport = null; }
@@ -2478,12 +2536,13 @@
       try {
         const ref = firebaseLibs.doc(db, 'users', email, 'reports', monthKey);
         // Live subscription — auto-updates when another device saves
-        unsubReport = firebaseLibs.onSnapshot(ref, (snap) => {
+        unsubReport = firebaseLibs.onSnapshot(ref, async (snap) => {
           if (!snap.exists()) {
-            // No report for this month yet — start fresh
-            const fresh = JSON.parse(JSON.stringify(DEFAULT_STATE));
-            fresh._month = monthKey;
-            fresh._owner = email;
+            // No report for this month yet — start fresh, but carry forward the
+            // client roster (name, contact, head count, type, payroll freq)
+            // from the most recent prior month so consultants don't have to
+            // re-create their clients every month. Visits and notes are blanked.
+            const fresh = await buildFreshMonthFromRoster(email, monthKey);
             applyRemoteState(fresh);
             setStatus('synced'); updatePillUI();
             return;
@@ -2533,6 +2592,10 @@
     function userIsTyping() {
       const el = document.activeElement;
       if (!el) return false;
+      // Ignore the month picker — focusing it is part of switching months,
+      // not active typing. Without this exception, switching months would
+      // defer the render and leave the page blank until the user clicks away.
+      if (el.id === 'monthPicker' || el.id === 'itMonthPicker' || el.id === 'adminMonthPicker') return false;
       const tag = el.tagName;
       const editable = el.isContentEditable;
       return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || editable;
@@ -2557,6 +2620,22 @@
       for (const k of Object.keys(state)) delete state[k];
       Object.assign(state, fresh);
       try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch (e) {}
+
+      // Make sure the current view is valid for the data we just loaded.
+      // If the user was viewing a client that doesn't exist in this month,
+      // or any view that depends on state that may not match, fall back to
+      // the Cover & Stats view rather than rendering broken content.
+      if (currentView && currentView.type === 'client') {
+        const idx = currentView.clientIdx;
+        if (!Array.isArray(state.clients) || idx == null || !state.clients[idx]) {
+          currentView = { type: 'meta', clientIdx: 0 };
+        }
+      } else if (currentView && currentView.type === 'venue') {
+        // Venue views are always valid since venue definitions are app-level
+      } else if (!currentView || !currentView.type) {
+        currentView = { type: 'meta', clientIdx: 0 };
+      }
+
       try { renderSidebar(); renderContent(); } catch (e) { console.warn('Render after pull failed:', e); }
     }
 
@@ -2644,9 +2723,11 @@
     // ----- Month switcher (consultant view) -----
     async function switchMonth(newMonthKey) {
       if (!newMonthKey) return;
+      // Just call loadMonth. The Firestore snapshot will fire and trigger
+      // a render via applyRemoteState once the new month's data arrives.
+      // We do NOT render here synchronously — at this moment `state` still
+      // holds the old month's data, so any render would just paint it again.
       await loadMonth(newMonthKey, viewingEmail);
-      renderSidebar();
-      renderContent();
     }
 
     async function listMyMonths() {
@@ -3914,7 +3995,10 @@
     });
 
     document.getElementById('deleteClientBtn').addEventListener('click', async () => {
-      const ok = await confirmDialog('Delete client?', `"${cli.name}" will be removed from the report. This cannot be undone (use Export JSON first if you want a backup).`);
+      const ok = await confirmDialog(
+        'Delete client?',
+        `"${cli.name}" will be removed from this month's report and will no longer appear in future months. Past months keep their record of this client unchanged. Continue?`
+      );
       if (!ok) return;
       state.clients.splice(currentView.clientIdx, 1);
       currentView = { type: 'meta' };
