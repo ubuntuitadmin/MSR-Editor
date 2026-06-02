@@ -1645,8 +1645,6 @@
 <!-- Sticky action bar -->
 <div class="action-bar">
   <div class="info" id="actionInfo"></div>
-  <button class="btn-secondary btn-sm" id="clearMonthBtn" title="Clear visits, journeys, summaries, head counts and monthly cover stats — keeps your client list and consultant details">Clear monthly data</button>
-  <button class="btn-secondary btn-sm" id="resetBtn">Reset to blank template</button>
   <button class="btn-primary" id="generateBtn">Generate Word Report</button>
 </div>
 
@@ -5389,32 +5387,10 @@
     });
   }
 
-  async function clearMonthlyData() {
-    // Save snapshot first as backup
-    await saveSnapshot(state);
-    // Preserve consultant info — these don't change month-to-month
-    const preservedMeta = {
-      consultant: state.meta.consultant || '',
-      region: state.meta.region || '',
-      year: state.meta.year || '',
-    };
-    // Reset to blank template, then restore consultant info
-    state = JSON.parse(JSON.stringify(DEFAULT_STATE));
-    ensureVenueArrays();
-    state.meta.consultant = preservedMeta.consultant;
-    state.meta.region = preservedMeta.region;
-    state.meta.year = preservedMeta.year;
-    currentView = { type: 'meta' };
-    save();
-    renderSidebar();
-    renderContent();
-  }
-
   async function generateReport() {
     const btn = document.getElementById('generateBtn');
     btn.disabled = true;
     btn.textContent = 'Generating…';
-    let succeeded = false;
     try {
       const docx = await loadDocxLib();
       const doc = buildDocx(docx);
@@ -5431,25 +5407,12 @@
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
       toast(`Generated ${filename}`);
-      succeeded = true;
     } catch (e) {
       console.error(e);
       toast('Generation failed: ' + e.message, true);
     } finally {
       btn.disabled = false;
       btn.textContent = 'Generate Word Report';
-    }
-
-    if (succeeded) {
-      // Prompt to clear month-end data
-      const ok = await confirmDialog(
-        'Clear monthly data for next month?',
-        'Now that the report is generated, clear all visits, journey logs (Trip Log, CCMA, Bargaining Council), summaries, head counts and monthly cover stats so you can start fresh next month?\n\nYour client list, contacts, consultant name, region and year are preserved. The current data will be saved as a daily backup before clearing — you can restore it from the Storage panel.'
-      );
-      if (ok) {
-        await clearMonthlyData();
-        toast('Cleared for next month. Previous data saved as backup.');
-      }
     }
   }
 
@@ -6344,27 +6307,6 @@
     });
     document.getElementById('exportJsonBtn').addEventListener('click', exportJson);
     document.getElementById('generateBtn').addEventListener('click', generateReport);
-    document.getElementById('clearMonthBtn').addEventListener('click', async () => {
-      const ok = await confirmDialog(
-        'Clear monthly data?',
-        'Clear all visits, journey logs (Trip Log, CCMA, Bargaining Council), summaries, head counts and monthly cover stats so you can start fresh next month?\n\nYour client list, contacts, consultant name, region and year are preserved. The current data will be saved as a daily backup first.'
-      );
-      if (!ok) return;
-      await clearMonthlyData();
-      toast('Cleared for next month. Previous data saved as backup.');
-    });
-    document.getElementById('resetBtn').addEventListener('click', async () => {
-      const ok = await confirmDialog('Reset to blank template?', 'All your edits will be replaced with the blank starting template (clients only, no data). Your current data will be saved as a daily backup before resetting, so you can restore it if needed.');
-      if (!ok) return;
-      // Save current as snapshot first
-      await saveSnapshot(state);
-      state = JSON.parse(JSON.stringify(DEFAULT_STATE));
-      currentView = { type: 'meta' };
-      save();
-      renderSidebar();
-      renderContent();
-      toast('Reset to defaults');
-    });
     document.getElementById('storageBtn').addEventListener('click', openStorageModal);
     document.getElementById('savePill').addEventListener('click', openStorageModal);
     document.getElementById('storageModalClose').addEventListener('click', closeStorageModal);
