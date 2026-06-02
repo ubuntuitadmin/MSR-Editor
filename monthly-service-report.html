@@ -1562,62 +1562,8 @@
     </button>
     <p class="signin-error hidden" id="signInError"></p>
     <p class="signin-foot">If you don't have access, please contact your Ubuntu administrator.</p>
-    <!-- TEMPORARY DEBUG PANEL — displays JavaScript errors on screen. Remove after diagnosis. -->
-    <div id="debugPanel" style="margin-top:20px;padding:12px;background:#fff8f6;border:1px solid #f0c8c0;border-radius:6px;font-family:monospace;font-size:11px;color:#7a2a1a;text-align:left;white-space:pre-wrap;word-break:break-word;display:none;"></div>
   </div>
 </div>
-<script>
-  // TEMPORARY DEBUG — captures uncaught JavaScript errors and shows them on screen.
-  // This runs BEFORE the main module, so it catches errors that prevent the rest
-  // of the app from initialising. Remove this <script> block after diagnosis.
-  (function () {
-    window.__dbg = function (msg) {
-      var p = document.getElementById('debugPanel');
-      if (!p) {
-        // Queue messages until panel exists
-        window.__dbgQueue = window.__dbgQueue || [];
-        window.__dbgQueue.push(msg);
-        return;
-      }
-      p.style.display = 'block';
-      var t = new Date();
-      var stamp = t.getMinutes().toString().padStart(2,'0') + ':' + t.getSeconds().toString().padStart(2,'0') + '.' + t.getMilliseconds().toString().padStart(3,'0');
-      p.textContent = (p.textContent ? p.textContent + '\n' : '') + '[' + stamp + '] ' + msg;
-    };
-    window.addEventListener('error', function (e) {
-      window.__dbg('ERROR: ' + (e.message || e.error || e) + ' @' + (e.filename || '?') + ':' + (e.lineno || '?'));
-    });
-    window.addEventListener('unhandledrejection', function (e) {
-      var r = e.reason;
-      var msg = r && r.message ? r.message : (r && r.toString ? r.toString() : String(r));
-      window.__dbg('PROMISE ERROR: ' + msg);
-    });
-    // Initial heartbeat
-    setTimeout(function () {
-      var p = document.getElementById('debugPanel');
-      if (!p) return;
-      p.style.display = 'block';
-      window.__dbg('Page loaded. UA: ' + navigator.userAgent.substring(0, 60));
-      // Flush queued messages
-      (window.__dbgQueue || []).forEach(window.__dbg);
-      window.__dbgQueue = [];
-      // Report whether localStorage/sessionStorage work (Safari sometimes blocks these in private mode)
-      try { localStorage.setItem('__t','1'); localStorage.removeItem('__t'); window.__dbg('localStorage: OK'); } catch (e) { window.__dbg('localStorage: BLOCKED ' + e.message); }
-      try { sessionStorage.setItem('__t','1'); sessionStorage.removeItem('__t'); window.__dbg('sessionStorage: OK'); } catch (e) { window.__dbg('sessionStorage: BLOCKED ' + e.message); }
-      try { window.__dbg('indexedDB: ' + (window.indexedDB ? 'available' : 'MISSING')); } catch (e) { window.__dbg('indexedDB: ' + e.message); }
-      window.__dbg('cookies enabled: ' + navigator.cookieEnabled);
-
-      // Body-level tap diagnostic — fires for ANY tap, regardless of element
-      var tapCount = 0;
-      document.body.addEventListener('click', function (e) {
-        tapCount++;
-        var t = e.target;
-        var id = t.id || (t.tagName + (t.className ? '.' + t.className.split(' ')[0] : ''));
-        window.__dbg('TAP #' + tapCount + ' on: ' + id);
-      }, true); // capture phase, fires before any other handler
-    }, 1500);
-  })();
-</script>
 
 <div id="appRoot" class="hidden">
 <div class="app">
@@ -2412,25 +2358,15 @@
         // Use device language for sign-in UI
         try { auth.useDeviceLanguage(); } catch (e) {}
 
-        if (window.__dbg) window.__dbg('Firebase initialised. Checking for redirect result…');
-
         // If the user just came back from Google's sign-in page (via redirect),
         // complete that flow before wiring the rest of the UI. onAuthStateChanged
         // will fire with the resulting user.
         try {
           if (typeof firebaseLibs.getRedirectResult === 'function') {
-            const redirectResult = await firebaseLibs.getRedirectResult(auth);
-            if (window.__dbg) {
-              if (redirectResult && redirectResult.user) {
-                window.__dbg('getRedirectResult: SIGNED IN as ' + redirectResult.user.email);
-              } else {
-                window.__dbg('getRedirectResult: no pending redirect (user: ' + (auth.currentUser ? auth.currentUser.email : 'null') + ')');
-              }
-            }
+            await firebaseLibs.getRedirectResult(auth);
           }
         } catch (e) {
           console.warn('Redirect sign-in completion error:', e);
-          if (window.__dbg) window.__dbg('getRedirectResult ERROR: ' + (e.code || '') + ' ' + (e.message || e));
           // Surface a friendly message; the auth state listener below will still
           // run and either keep us signed out or pick up a successful sign-in.
           if (e && e.code && e.code !== 'auth/no-auth-event') {
@@ -2439,10 +2375,7 @@
         }
 
         // Listen for auth state changes (sign-in / sign-out / page-load resumption)
-        firebaseLibs.onAuthStateChanged(auth, function (user) {
-          if (window.__dbg) window.__dbg('onAuthStateChanged fired. user: ' + (user ? user.email : 'null'));
-          onAuthChange(user);
-        });
+        firebaseLibs.onAuthStateChanged(auth, onAuthChange);
 
         wireUI();
       } catch (e) {
@@ -2454,21 +2387,7 @@
     function wireUI() {
       // Sign-in screen button
       const signInBtn = document.getElementById('signInBtn');
-      if (window.__dbg) window.__dbg('wireUI: signInBtn found? ' + (signInBtn ? 'YES' : 'NO'));
-      if (signInBtn) {
-        signInBtn.addEventListener('click', function (e) {
-          if (window.__dbg) window.__dbg('signInBtn CLICKED (addEventListener path)');
-          signIn();
-        });
-        // Belt-and-braces: also add a direct onclick property in case
-        // iOS Safari's event listener didn't take for some obscure reason
-        signInBtn.onclick = function () {
-          if (window.__dbg) window.__dbg('signInBtn CLICKED (onclick path)');
-          signIn();
-          return false;
-        };
-        if (window.__dbg) window.__dbg('signInBtn handlers attached');
-      }
+      if (signInBtn) signInBtn.addEventListener('click', signIn);
 
       // Account pill in the toolbar opens the account modal
       const acctPill = document.getElementById('accountPill');
@@ -2504,16 +2423,13 @@
     // ----- Authentication -----
     async function signIn() {
       try {
-        if (window.__dbg) window.__dbg('signIn() called. isMobile=' + isMobileDevice());
         setStatus('loading'); updatePillUI();
         const provider = new firebaseLibs.GoogleAuthProvider();
 
         // On mobile devices, popup sign-in is unreliable (iOS Safari blocks it,
         // some in-app browsers ignore it). Use full-page redirect instead.
         if (isMobileDevice()) {
-          if (window.__dbg) window.__dbg('Calling signInWithRedirect…');
           await firebaseLibs.signInWithRedirect(auth, provider);
-          if (window.__dbg) window.__dbg('signInWithRedirect returned (this is unexpected — should have navigated away)');
           // The browser navigates away; control returns when Google redirects
           // back to this page and getRedirectResult() runs during init().
           return;
@@ -2534,7 +2450,6 @@
         }
       } catch (e) {
         console.warn('Sign-in failed:', e);
-        if (window.__dbg) window.__dbg('signIn ERROR: ' + (e.code || '') + ' ' + (e.message || e));
         showSignInError(e.message || 'Sign-in was cancelled or failed. Please try again.');
         setStatus('signed-out'); updatePillUI();
       }
