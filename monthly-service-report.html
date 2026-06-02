@@ -803,12 +803,23 @@
     color: #3C4043;
     cursor: pointer;
     transition: box-shadow 0.15s, border-color 0.15s;
+    /* iOS Safari fixes: ensure the button reliably receives taps and there's
+       no 300ms click delay. Without these, the SVG child can intercept the
+       tap event and prevent the button's click handler from firing. */
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: rgba(0,0,0,0.04);
+    position: relative;
+    z-index: 1;
   }
   .btn-google:hover {
     box-shadow: 0 1px 3px rgba(60,64,67,0.15);
     border-color: #C8CCD0;
   }
-  .btn-google svg { width: 18px; height: 18px; }
+  /* Critical fix: SVG inside button must NOT capture taps on iOS Safari.
+     Without pointer-events:none, tapping the icon registers on the SVG (or
+     the button's parent) rather than the button itself, breaking the click
+     handler. This was the root cause of iPhone sign-in failures. */
+  .btn-google svg { width: 18px; height: 18px; pointer-events: none; }
 
   /* Drive setup hint (shown when CLIENT_ID not configured) */
   .drive-setup-hint {
