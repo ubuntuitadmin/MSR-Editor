@@ -1551,8 +1551,41 @@
     </button>
     <p class="signin-error hidden" id="signInError"></p>
     <p class="signin-foot">If you don't have access, please contact your Ubuntu administrator.</p>
+    <!-- TEMPORARY DEBUG PANEL — displays JavaScript errors on screen. Remove after diagnosis. -->
+    <div id="debugPanel" style="margin-top:20px;padding:12px;background:#fff8f6;border:1px solid #f0c8c0;border-radius:6px;font-family:monospace;font-size:11px;color:#7a2a1a;text-align:left;white-space:pre-wrap;word-break:break-word;display:none;"></div>
   </div>
 </div>
+<script>
+  // TEMPORARY DEBUG — captures uncaught JavaScript errors and shows them on screen.
+  // This runs BEFORE the main module, so it catches errors that prevent the rest
+  // of the app from initialising. Remove this <script> block after diagnosis.
+  (function () {
+    function showDebug(msg) {
+      var p = document.getElementById('debugPanel');
+      if (!p) return;
+      p.style.display = 'block';
+      p.textContent = (p.textContent ? p.textContent + '\n\n' : '') + msg;
+    }
+    window.addEventListener('error', function (e) {
+      showDebug('ERROR: ' + (e.message || e.error || e) + '\n@ ' + (e.filename || '?') + ':' + (e.lineno || '?'));
+    });
+    window.addEventListener('unhandledrejection', function (e) {
+      var r = e.reason;
+      var msg = r && r.message ? r.message : (r && r.toString ? r.toString() : String(r));
+      showDebug('PROMISE ERROR: ' + msg);
+    });
+    // Log a heartbeat so we know JS is running at all
+    setTimeout(function () {
+      if (document.getElementById('signInBtn')) {
+        var p = document.getElementById('debugPanel');
+        if (p && !p.textContent) {
+          p.style.display = 'block';
+          p.textContent = 'JS running. User agent: ' + navigator.userAgent.substring(0, 120);
+        }
+      }
+    }, 3000);
+  })();
+</script>
 
 <div id="appRoot" class="hidden">
 <div class="app">
