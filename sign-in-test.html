@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <title>Sign-in Test</title>
+  <style>
+    * { box-sizing: border-box; -webkit-tap-highlight-color: rgba(0,0,0,0.05); }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+      margin: 0;
+      padding: 24px;
+      background: #f5f1eb;
+      color: #1a2a44;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: flex-start;
+    }
+    h1 { margin: 12px 0 18px; font-size: 22px; text-align: center; }
+    button {
+      display: block;
+      width: 100%;
+      max-width: 360px;
+      padding: 16px 20px;
+      margin: 8px 0;
+      font-size: 16px;
+      font-weight: 500;
+      background: #fff;
+      border: 1px solid #ccd;
+      border-radius: 8px;
+      cursor: pointer;
+      touch-action: manipulation;
+      color: #1a2a44;
+    }
+    button:active { background: #eee; }
+    #log {
+      width: 100%;
+      max-width: 360px;
+      margin-top: 16px;
+      padding: 12px;
+      background: #fff;
+      border: 1px solid #d4c8b8;
+      border-radius: 6px;
+      font-family: monospace;
+      font-size: 12px;
+      color: #2a1a08;
+      white-space: pre-wrap;
+      word-break: break-word;
+      min-height: 100px;
+    }
+    .log-entry { padding: 2px 0; }
+  </style>
+</head>
+<body>
+  <h1>Sign-in Test (Isolated)</h1>
+  <button id="popupBtn">Try signInWithPopup</button>
+  <button id="redirectBtn">Try signInWithRedirect</button>
+  <button id="signOutBtn">Sign out</button>
+  <div id="log"></div>
+
+  <script type="module">
+    const logEl = document.getElementById('log');
+    function log(msg) {
+      const div = document.createElement('div');
+      div.className = 'log-entry';
+      const t = new Date();
+      const stamp = t.getMinutes().toString().padStart(2,'0') + ':' + t.getSeconds().toString().padStart(2,'0');
+      div.textContent = '[' + stamp + '] ' + msg;
+      logEl.appendChild(div);
+    }
+    window.addEventListener('error', e => log('ERR: ' + (e.message || e)));
+    window.addEventListener('unhandledrejection', e => log('PROMISE ERR: ' + (e.reason && e.reason.message || e.reason)));
+
+    log('Page loaded. UA: ' + navigator.userAgent.substring(0, 70));
+
+    // Same Firebase config as the main app
+    const firebaseConfig = {
+      apiKey:            "AIzaSyCWP6a515dS0WAG0BIuGg7qlz_kxt6OkVw",
+      authDomain:        "msr-editor-c2135.firebaseapp.com",
+      projectId:         "msr-editor-c2135",
+      storageBucket:     "msr-editor-c2135.firebasestorage.app",
+      messagingSenderId: "187519346260",
+      appId:             "1:187519346260:web:af80560934d105077a2fc1",
+    };
+
+    try {
+      const [appMod, authMod] = await Promise.all([
+        import('https://www.gstatic.com/firebasejs/10.13.0/firebase-app.js'),
+        import('https://www.gstatic.com/firebasejs/10.13.0/firebase-auth.js'),
+      ]);
+      log('Firebase modules loaded.');
+
+      const app = appMod.initializeApp(firebaseConfig);
+      const auth = authMod.getAuth(app);
+      log('Firebase initialised.');
+
+      // Check for redirect result
+      try {
+        const result = await authMod.getRedirectResult(auth);
+        if (result && result.user) {
+          log('REDIRECT SUCCESS: signed in as ' + result.user.email);
+        } else {
+          log('No pending redirect. Current user: ' + (auth.currentUser ? auth.currentUser.email : 'null'));
+        }
+      } catch (e) {
+        log('Redirect result ERR: ' + (e.code || '') + ' ' + (e.message || e));
+      }
+
+      authMod.onAuthStateChanged(auth, u => {
+        log('Auth state changed. user: ' + (u ? u.email : 'null'));
+      });
+
+      // Wire buttons — use both addEventListener and onclick for safety
+      document.getElementById('popupBtn').addEventListener('click', async () => {
+        log('TAP: popup btn');
+        try {
+          const provider = new authMod.GoogleAuthProvider();
+          await authMod.signInWithPopup(auth, provider);
+          log('Popup sign-in returned.');
+        } catch (e) {
+          log('Popup ERR: ' + (e.code || '') + ' ' + (e.message || e));
+        }
+      });
+
+      document.getElementById('redirectBtn').addEventListener('click', async () => {
+        log('TAP: redirect btn — about to call signInWithRedirect');
+        try {
+          const provider = new authMod.GoogleAuthProvider();
+          await authMod.signInWithRedirect(auth, provider);
+          log('signInWithRedirect returned without navigating (UNEXPECTED on iOS)');
+        } catch (e) {
+          log('Redirect ERR: ' + (e.code || '') + ' ' + (e.message || e));
+        }
+      });
+
+      document.getElementById('signOutBtn').addEventListener('click', async () => {
+        log('TAP: sign-out btn');
+        try {
+          await authMod.signOut(auth);
+          log('Signed out.');
+        } catch (e) {
+          log('Sign out ERR: ' + (e.message || e));
+        }
+      });
+
+      // Body-level tap diagnostic to confirm taps register at all
+      document.body.addEventListener('click', e => {
+        const t = e.target;
+        log('BODY tap target: ' + (t.id ? '#' + t.id : t.tagName));
+      }, true);
+    } catch (e) {
+      log('Init ERR: ' + (e.message || e));
+    }
+  </script>
+</body>
+</html>
