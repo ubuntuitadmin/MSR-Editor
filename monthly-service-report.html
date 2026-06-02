@@ -1595,6 +1595,15 @@
       try { sessionStorage.setItem('__t','1'); sessionStorage.removeItem('__t'); window.__dbg('sessionStorage: OK'); } catch (e) { window.__dbg('sessionStorage: BLOCKED ' + e.message); }
       try { window.__dbg('indexedDB: ' + (window.indexedDB ? 'available' : 'MISSING')); } catch (e) { window.__dbg('indexedDB: ' + e.message); }
       window.__dbg('cookies enabled: ' + navigator.cookieEnabled);
+
+      // Body-level tap diagnostic — fires for ANY tap, regardless of element
+      var tapCount = 0;
+      document.body.addEventListener('click', function (e) {
+        tapCount++;
+        var t = e.target;
+        var id = t.id || (t.tagName + (t.className ? '.' + t.className.split(' ')[0] : ''));
+        window.__dbg('TAP #' + tapCount + ' on: ' + id);
+      }, true); // capture phase, fires before any other handler
     }, 1500);
   })();
 </script>
@@ -2434,7 +2443,21 @@
     function wireUI() {
       // Sign-in screen button
       const signInBtn = document.getElementById('signInBtn');
-      if (signInBtn) signInBtn.addEventListener('click', signIn);
+      if (window.__dbg) window.__dbg('wireUI: signInBtn found? ' + (signInBtn ? 'YES' : 'NO'));
+      if (signInBtn) {
+        signInBtn.addEventListener('click', function (e) {
+          if (window.__dbg) window.__dbg('signInBtn CLICKED (addEventListener path)');
+          signIn();
+        });
+        // Belt-and-braces: also add a direct onclick property in case
+        // iOS Safari's event listener didn't take for some obscure reason
+        signInBtn.onclick = function () {
+          if (window.__dbg) window.__dbg('signInBtn CLICKED (onclick path)');
+          signIn();
+          return false;
+        };
+        if (window.__dbg) window.__dbg('signInBtn handlers attached');
+      }
 
       // Account pill in the toolbar opens the account modal
       const acctPill = document.getElementById('accountPill');
