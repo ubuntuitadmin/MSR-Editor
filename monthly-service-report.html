@@ -605,6 +605,16 @@
     transition: border-color 0.15s, background 0.15s;
   }
   .trip-row:focus-within { border-color: var(--accent-soft); background: #FBF7F1; }
+  .travel-leg {
+    font-size: 11px;
+    color: var(--muted);
+    font-family: 'JetBrains Mono', monospace;
+    letter-spacing: 0.02em;
+    padding: 4px 12px 4px 24px;
+    margin: 0 8px;
+    font-style: italic;
+    opacity: 0.85;
+  }
   .trip-row input,
   .trip-row select {
     background: #fff;
@@ -4167,6 +4177,104 @@
     return 'trip_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 7);
   }
 
+  // ------------------------------------------------------------
+  // Travel between consecutive client visits
+  // ------------------------------------------------------------
+  // Given an array of trip-like entries (Trip Log, CCMA, or BC),
+  // computes the travel leg from the PREVIOUS visit to each entry
+  // when both are on the same date.
+  //
+  // Returns a Map keyed by the entry's ORIGINAL index in the input
+  // array, with values { km, mins } (either may be null if missing).
+  // Entries without a valid previous-same-date neighbour, or with
+  // insanity-check failures (negative, >12h, >500km), are omitted.
+  //
+  // We sort within each date by "Arrived at Client" time so the
+  // calculation is correct even when rows were entered out of order.
+  // ------------------------------------------------------------
+  function computeTravelLegs(entries) {
+    const result = new Map();
+    if (!Array.isArray(entries) || entries.length < 2) return result;
+
+    const parseTime = (s) => {
+      if (!s) return null;
+      const m = String(s).trim().match(/^(\d{1,2}):?(\d{2})?$/);
+      if (!m) return null;
+      const h = parseInt(m[1], 10);
+      const mn = parseInt(m[2] || '0', 10);
+      if (h < 0 || h > 23 || mn < 0 || mn > 59) return null;
+      return h * 60 + mn;
+    };
+
+    // Group by date, preserving original indices
+    const byDate = new Map();
+    entries.forEach((entry, idx) => {
+      const d = (entry.date || '').trim();
+      if (!d) return;
+      if (!byDate.has(d)) byDate.set(d, []);
+      byDate.get(d).push({ entry, idx });
+    });
+
+    for (const dateGroup of byDate.values()) {
+      if (dateGroup.length < 2) continue;
+      // Sort the group by Arrived time (timeOut field) ascending. Entries
+      // with no time go to the end so they don't break chronological calc.
+      dateGroup.sort((a, b) => {
+        const ta = parseTime(a.entry.timeOut);
+        const tb = parseTime(b.entry.timeOut);
+        if (ta === null && tb === null) return 0;
+        if (ta === null) return 1;
+        if (tb === null) return -1;
+        return ta - tb;
+      });
+
+      // Walk pairs: for each entry from index 1 onwards, compute leg from previous.
+      for (let i = 1; i < dateGroup.length; i++) {
+        const prev = dateGroup[i - 1].entry;
+        const curr = dateGroup[i].entry;
+        const currIdx = dateGroup[i].idx;
+
+        // Travel TIME: this entry's Arrived minus previous entry's Left
+        let travelMins = null;
+        const prevLeft = parseTime(prev.timeBack);
+        const currArrived = parseTime(curr.timeOut);
+        if (prevLeft !== null && currArrived !== null) {
+          let diff = currArrived - prevLeft;
+          if (diff < 0) diff += 24 * 60; // crossed midnight
+          // Sanity check: ignore implausible durations (>12h)
+          if (diff >= 0 && diff <= 12 * 60) travelMins = diff;
+        }
+
+        // Travel KM: this entry's Odo Start minus previous entry's Odo End
+        let travelKm = null;
+        const prevEnd = parseFloat(prev.odoEnd);
+        const currStart = parseFloat(curr.odoStart);
+        if (!isNaN(prevEnd) && !isNaN(currStart)) {
+          const diff = currStart - prevEnd;
+          // Sanity check: must be non-negative and < 500 km
+          if (diff >= 0 && diff <= 500) travelKm = diff;
+        }
+
+        if (travelMins !== null || travelKm !== null) {
+          result.set(currIdx, { km: travelKm, mins: travelMins });
+        }
+      }
+    }
+
+    return result;
+  }
+
+  // Render-helper: format a travel leg as a small inline string,
+  // e.g. "↷ 18 km · 35 min from previous client".
+  // Returns '' if both fields are null.
+  function fmtTravelLeg(leg, labelPrevious) {
+    if (!leg || (leg.km === null && leg.mins === null)) return '';
+    const parts = [];
+    if (leg.km !== null) parts.push(leg.km.toLocaleString('en-ZA', { maximumFractionDigits: 1 }) + ' km');
+    if (leg.mins !== null) parts.push(fmtDuration(leg.mins));
+    return '↷ ' + parts.join(' · ') + ' from ' + (labelPrevious || 'previous');
+  }
+
   function renderTripsView() {
     const trips = state.trips || [];
     const filter = state.tripFilter || { client: '', from: '', to: '' };
@@ -4249,31 +4357,42 @@
             <div></div>
           </div>
           <div id="tripsList">
-            ${filtered.map((t) => {
-              // Find the actual index in the unfiltered list
-              const realIdx = trips.indexOf(t);
-              const derived = t.odoStart && t.odoEnd && parseFloat(t.odoEnd) >= parseFloat(t.odoStart);
-              const kmVal = derived ? (parseFloat(t.odoEnd) - parseFloat(t.odoStart)) : (t.km || '');
-              return `
-                <div class="trip-row" data-trip-idx="${realIdx}">
-                  <input type="text" data-trip-field="date" placeholder="6 Mar" value="${escapeHtml(t.date)}" />
-                  <input type="text" data-trip-field="client" placeholder="Client / destination"
-                    list="clientNamesList" value="${escapeHtml(t.client)}" />
-                  <input type="text" data-trip-field="timeOut" placeholder="08:30" value="${escapeHtml(t.timeOut)}" />
-                  <input type="text" data-trip-field="timeBack" placeholder="13:15" value="${escapeHtml(t.timeBack)}" />
-                  <input type="text" data-trip-field="odoStart" placeholder="" value="${escapeHtml(t.odoStart)}" inputmode="decimal" />
-                  <input type="text" data-trip-field="odoEnd" placeholder="" value="${escapeHtml(t.odoEnd)}" inputmode="decimal" />
-                  <input type="text" data-trip-field="km" class="${derived ? 'km-derived' : ''}"
-                    placeholder="0" value="${escapeHtml(String(kmVal))}" inputmode="decimal"
-                    ${derived ? 'readonly title="Derived from odometer readings"' : ''} />
-                  <input type="text" data-trip-field="notes" placeholder="Optional" value="${escapeHtml(t.notes)}" />
-                  <div class="row-actions">
-                    <button data-trip-action="duplicate" title="Duplicate">⊕</button>
-                    <button data-trip-action="remove" class="remove" title="Remove">✕</button>
+            ${(() => {
+              // Compute travel legs between consecutive same-date trips,
+              // using the filtered list (so the legs match what's visible).
+              const legs = computeTravelLegs(filtered);
+              return filtered.map((t, fIdx) => {
+                // Find the actual index in the unfiltered list
+                const realIdx = trips.indexOf(t);
+                const derived = t.odoStart && t.odoEnd && parseFloat(t.odoEnd) >= parseFloat(t.odoStart);
+                const kmVal = derived ? (parseFloat(t.odoEnd) - parseFloat(t.odoStart)) : (t.km || '');
+                const leg = legs.get(fIdx);
+                const prevClient = fIdx > 0 ? (filtered[fIdx - 1].client || 'previous client') : '';
+                const legHtml = leg
+                  ? `<div class="travel-leg">${escapeHtml(fmtTravelLeg(leg, prevClient))}</div>`
+                  : '';
+                return `
+                  ${legHtml}
+                  <div class="trip-row" data-trip-idx="${realIdx}">
+                    <input type="text" data-trip-field="date" placeholder="6 Mar" value="${escapeHtml(t.date)}" />
+                    <input type="text" data-trip-field="client" placeholder="Client / destination"
+                      list="clientNamesList" value="${escapeHtml(t.client)}" />
+                    <input type="text" data-trip-field="timeOut" placeholder="08:30" value="${escapeHtml(t.timeOut)}" />
+                    <input type="text" data-trip-field="timeBack" placeholder="13:15" value="${escapeHtml(t.timeBack)}" />
+                    <input type="text" data-trip-field="odoStart" placeholder="" value="${escapeHtml(t.odoStart)}" inputmode="decimal" />
+                    <input type="text" data-trip-field="odoEnd" placeholder="" value="${escapeHtml(t.odoEnd)}" inputmode="decimal" />
+                    <input type="text" data-trip-field="km" class="${derived ? 'km-derived' : ''}"
+                      placeholder="0" value="${escapeHtml(String(kmVal))}" inputmode="decimal"
+                      ${derived ? 'readonly title="Derived from odometer readings"' : ''} />
+                    <input type="text" data-trip-field="notes" placeholder="Optional" value="${escapeHtml(t.notes)}" />
+                    <div class="row-actions">
+                      <button data-trip-action="duplicate" title="Duplicate">⊕</button>
+                      <button data-trip-action="remove" class="remove" title="Remove">✕</button>
+                    </div>
                   </div>
-                </div>
-              `;
-            }).join('')}
+                `;
+              }).join('');
+            })()}
           </div>
           <datalist id="clientNamesList">
             ${clientOptions.map(c => `<option value="${escapeHtml(c)}"></option>`).join('')}
@@ -4470,29 +4589,38 @@
             <div></div>
           </div>
           <div id="venueEntriesList">
-            ${entries.map((e, idx) => {
-              const derived = e.odoStart && e.odoEnd && parseFloat(e.odoEnd) >= parseFloat(e.odoStart);
-              const kmVal = derived ? (parseFloat(e.odoEnd) - parseFloat(e.odoStart)) : (e.km || '');
-              return `
-                <div class="trip-row" data-venue-entry-idx="${idx}">
-                  <input type="text" data-vfield="date" placeholder="6 Mar" value="${escapeHtml(e.date)}" />
-                  <input type="text" data-vfield="client" placeholder="Which client?"
-                    list="venueClientList" value="${escapeHtml(e.client)}" />
-                  <input type="text" data-vfield="timeOut" placeholder="08:30" value="${escapeHtml(e.timeOut)}" />
-                  <input type="text" data-vfield="timeBack" placeholder="13:15" value="${escapeHtml(e.timeBack)}" />
-                  <input type="text" data-vfield="odoStart" value="${escapeHtml(e.odoStart)}" inputmode="decimal" />
-                  <input type="text" data-vfield="odoEnd" value="${escapeHtml(e.odoEnd)}" inputmode="decimal" />
-                  <input type="text" data-vfield="km" class="${derived ? 'km-derived' : ''}"
-                    value="${escapeHtml(String(kmVal))}" inputmode="decimal"
-                    ${derived ? 'readonly title="Derived from odometer readings"' : ''} />
-                  <input type="text" data-vfield="notes" placeholder="Matter, employee, outcome…" value="${escapeHtml(e.notes)}" />
-                  <div class="row-actions">
-                    <button data-vaction="duplicate" title="Duplicate">⊕</button>
-                    <button data-vaction="remove" class="remove" title="Remove">✕</button>
+            ${(() => {
+              const legs = computeTravelLegs(entries);
+              return entries.map((e, idx) => {
+                const derived = e.odoStart && e.odoEnd && parseFloat(e.odoEnd) >= parseFloat(e.odoStart);
+                const kmVal = derived ? (parseFloat(e.odoEnd) - parseFloat(e.odoStart)) : (e.km || '');
+                const leg = legs.get(idx);
+                const prevClient = idx > 0 ? (entries[idx - 1].client || 'previous client') : '';
+                const legHtml = leg
+                  ? `<div class="travel-leg">${escapeHtml(fmtTravelLeg(leg, prevClient))}</div>`
+                  : '';
+                return `
+                  ${legHtml}
+                  <div class="trip-row" data-venue-entry-idx="${idx}">
+                    <input type="text" data-vfield="date" placeholder="6 Mar" value="${escapeHtml(e.date)}" />
+                    <input type="text" data-vfield="client" placeholder="Which client?"
+                      list="venueClientList" value="${escapeHtml(e.client)}" />
+                    <input type="text" data-vfield="timeOut" placeholder="08:30" value="${escapeHtml(e.timeOut)}" />
+                    <input type="text" data-vfield="timeBack" placeholder="13:15" value="${escapeHtml(e.timeBack)}" />
+                    <input type="text" data-vfield="odoStart" value="${escapeHtml(e.odoStart)}" inputmode="decimal" />
+                    <input type="text" data-vfield="odoEnd" value="${escapeHtml(e.odoEnd)}" inputmode="decimal" />
+                    <input type="text" data-vfield="km" class="${derived ? 'km-derived' : ''}"
+                      value="${escapeHtml(String(kmVal))}" inputmode="decimal"
+                      ${derived ? 'readonly title="Derived from odometer readings"' : ''} />
+                    <input type="text" data-vfield="notes" placeholder="Matter, employee, outcome…" value="${escapeHtml(e.notes)}" />
+                    <div class="row-actions">
+                      <button data-vaction="duplicate" title="Duplicate">⊕</button>
+                      <button data-vaction="remove" class="remove" title="Remove">✕</button>
+                    </div>
                   </div>
-                </div>
-              `;
-            }).join('')}
+                `;
+              }).join('');
+            })()}
           </div>
           <datalist id="venueClientList">
             ${clientOptions.map(c => `<option value="${escapeHtml(c)}"></option>`).join('')}
@@ -5093,6 +5221,53 @@
     const trips = state.trips || [];
     if (trips.length > 0) {
       const totals = tripTotals(trips);
+      const tripLegs = computeTravelLegs(trips);
+
+      // Helper: build a thin travel-leg row spanning the full table width.
+      const tripTravelLegRow = (leg, prevClient) => new TableRow({
+        cantSplit: true,
+        children: [new TableCell({
+          borders: cellBorders,
+          width: { size: 9360, type: WidthType.DXA },
+          columnSpan: 7,
+          shading: { fill: "F4F1EC", type: ShadingType.CLEAR },
+          margins: { top: 40, bottom: 40, left: 220, right: 140 },
+          children: [new Paragraph({
+            children: [new TextRun({
+              text: fmtTravelLeg(leg, prevClient),
+              italics: true,
+              color: MUTED,
+              size: 16,
+              font: "Calibri",
+            })],
+          })],
+        })],
+      });
+
+      const tripDataRows = [];
+      trips.forEach((t, i) => {
+        const leg = tripLegs.get(i);
+        if (leg) {
+          const prevClient = (trips[i - 1] && trips[i - 1].client) || 'previous client';
+          tripDataRows.push(tripTravelLegRow(leg, prevClient));
+        }
+        const fill = i % 2 ? ROW_ALT : undefined;
+        const km = tripKm(t);
+        const dur = tripDuration(t);
+        tripDataRows.push(new TableRow({
+          cantSplit: true,
+          children: [
+            bodyCell(t.date || "—",     1000, { fill, bold: true, color: NAVY, valign: VerticalAlign.TOP }),
+            bodyCell(t.client || "—",   2000, { fill, valign: VerticalAlign.TOP }),
+            bodyCell(t.timeOut || "—",  1180,  { fill, valign: VerticalAlign.TOP, align: AlignmentType.CENTER }),
+            bodyCell(t.timeBack || "—", 1180,  { fill, valign: VerticalAlign.TOP, align: AlignmentType.CENTER }),
+            bodyCell(dur === null ? "—" : fmtDuration(dur), 1080, { fill, valign: VerticalAlign.TOP, align: AlignmentType.CENTER }),
+            bodyCell(km ? km.toLocaleString('en-ZA', { maximumFractionDigits: 1 }) : "—", 880, { fill, valign: VerticalAlign.TOP, align: AlignmentType.RIGHT, bold: true }),
+            bodyCell(t.notes || "",     2040, { fill, valign: VerticalAlign.TOP }),
+          ],
+        }));
+      });
+
       const tripLogTable = new Table({
         width: { size: 9360, type: WidthType.DXA },
         columnWidths: [1000, 2000, 1180, 1180, 1080, 880, 2040],
@@ -5109,23 +5284,7 @@
               headerCell("Notes", 2040),
             ],
           }),
-          ...trips.map((t, i) => {
-            const fill = i % 2 ? ROW_ALT : undefined;
-            const km = tripKm(t);
-            const dur = tripDuration(t);
-            return new TableRow({
-              cantSplit: true,
-              children: [
-                bodyCell(t.date || "—",     1000, { fill, bold: true, color: NAVY, valign: VerticalAlign.TOP }),
-                bodyCell(t.client || "—",   2000, { fill, valign: VerticalAlign.TOP }),
-                bodyCell(t.timeOut || "—",  1180,  { fill, valign: VerticalAlign.TOP, align: AlignmentType.CENTER }),
-                bodyCell(t.timeBack || "—", 1180,  { fill, valign: VerticalAlign.TOP, align: AlignmentType.CENTER }),
-                bodyCell(dur === null ? "—" : fmtDuration(dur), 1080, { fill, valign: VerticalAlign.TOP, align: AlignmentType.CENTER }),
-                bodyCell(km ? km.toLocaleString('en-ZA', { maximumFractionDigits: 1 }) : "—", 880, { fill, valign: VerticalAlign.TOP, align: AlignmentType.RIGHT, bold: true }),
-                bodyCell(t.notes || "",     2040, { fill, valign: VerticalAlign.TOP }),
-              ],
-            });
-          }),
+          ...tripDataRows,
           // Subtotal row
           new TableRow({
             cantSplit: true,
@@ -5160,6 +5319,54 @@
     // ---- CCMA & Bargaining Council attendance tables ----
     function buildJourneyTable(entries, clientHeader) {
       const tot = tripTotals(entries);
+      const legs = computeTravelLegs(entries);
+
+      // Helper: build a thin travel-leg row spanning the full table width.
+      const travelLegRow = (leg, prevClient) => new TableRow({
+        cantSplit: true,
+        children: [new TableCell({
+          borders: cellBorders,
+          width: { size: 9360, type: WidthType.DXA },
+          columnSpan: 7,
+          shading: { fill: "F4F1EC", type: ShadingType.CLEAR },
+          margins: { top: 40, bottom: 40, left: 220, right: 140 },
+          children: [new Paragraph({
+            children: [new TextRun({
+              text: fmtTravelLeg(leg, prevClient),
+              italics: true,
+              color: MUTED,
+              size: 16,
+              font: "Calibri",
+            })],
+          })],
+        })],
+      });
+
+      // Build entry rows, interleaving travel-leg rows where applicable.
+      const dataRows = [];
+      entries.forEach((t, i) => {
+        const leg = legs.get(i);
+        if (leg) {
+          const prevClient = (entries[i - 1] && entries[i - 1].client) || 'previous client';
+          dataRows.push(travelLegRow(leg, prevClient));
+        }
+        const fill = i % 2 ? ROW_ALT : undefined;
+        const km = tripKm(t);
+        const dur = tripDuration(t);
+        dataRows.push(new TableRow({
+          cantSplit: true,
+          children: [
+            bodyCell(t.date || "—",     1000, { fill, bold: true, color: NAVY, valign: VerticalAlign.TOP }),
+            bodyCell(t.client || "—",   2000, { fill, valign: VerticalAlign.TOP }),
+            bodyCell(t.timeOut || "—",  1180,  { fill, valign: VerticalAlign.TOP, align: AlignmentType.CENTER }),
+            bodyCell(t.timeBack || "—", 1180,  { fill, valign: VerticalAlign.TOP, align: AlignmentType.CENTER }),
+            bodyCell(dur === null ? "—" : fmtDuration(dur), 1080, { fill, valign: VerticalAlign.TOP, align: AlignmentType.CENTER }),
+            bodyCell(km ? km.toLocaleString('en-ZA', { maximumFractionDigits: 1 }) : "—", 880, { fill, valign: VerticalAlign.TOP, align: AlignmentType.RIGHT, bold: true }),
+            bodyCell(t.notes || "",     2040, { fill, valign: VerticalAlign.TOP }),
+          ],
+        }));
+      });
+
       return new Table({
         width: { size: 9360, type: WidthType.DXA },
         columnWidths: [1000, 2000, 1180, 1180, 1080, 880, 2040],
@@ -5176,23 +5383,7 @@
               headerCell("Notes", 2040),
             ],
           }),
-          ...entries.map((t, i) => {
-            const fill = i % 2 ? ROW_ALT : undefined;
-            const km = tripKm(t);
-            const dur = tripDuration(t);
-            return new TableRow({
-              cantSplit: true,
-              children: [
-                bodyCell(t.date || "—",     1000, { fill, bold: true, color: NAVY, valign: VerticalAlign.TOP }),
-                bodyCell(t.client || "—",   2000, { fill, valign: VerticalAlign.TOP }),
-                bodyCell(t.timeOut || "—",  1180,  { fill, valign: VerticalAlign.TOP, align: AlignmentType.CENTER }),
-                bodyCell(t.timeBack || "—", 1180,  { fill, valign: VerticalAlign.TOP, align: AlignmentType.CENTER }),
-                bodyCell(dur === null ? "—" : fmtDuration(dur), 1080, { fill, valign: VerticalAlign.TOP, align: AlignmentType.CENTER }),
-                bodyCell(km ? km.toLocaleString('en-ZA', { maximumFractionDigits: 1 }) : "—", 880, { fill, valign: VerticalAlign.TOP, align: AlignmentType.RIGHT, bold: true }),
-                bodyCell(t.notes || "",     2040, { fill, valign: VerticalAlign.TOP }),
-              ],
-            });
-          }),
+          ...dataRows,
           new TableRow({
             cantSplit: true,
             children: [
