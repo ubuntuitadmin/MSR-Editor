@@ -581,7 +581,7 @@
 
   .trip-list-header {
     display: grid;
-    grid-template-columns: 100px minmax(140px, 1.6fr) 110px 110px 90px 90px 76px minmax(110px, 1.5fr) 70px;
+    grid-template-columns: 100px minmax(130px, 1.4fr) 110px 110px 76px 90px 90px 76px minmax(110px, 1.5fr) 70px;
     gap: 6px;
     padding: 8px 10px;
     font-size: 10px;
@@ -594,7 +594,7 @@
   }
   .trip-row {
     display: grid;
-    grid-template-columns: 100px minmax(140px, 1.6fr) 110px 110px 90px 90px 76px minmax(110px, 1.5fr) 70px;
+    grid-template-columns: 100px minmax(130px, 1.4fr) 110px 110px 76px 90px 90px 76px minmax(110px, 1.5fr) 70px;
     gap: 6px;
     padding: 6px 8px;
     background: var(--cream);
@@ -605,15 +605,29 @@
     transition: border-color 0.15s, background 0.15s;
   }
   .trip-row:focus-within { border-color: var(--accent-soft); background: #FBF7F1; }
+  /* Read-only "Time at Client" cell — visually distinct from inputs since it's
+     auto-computed from Arrived/Left times and cannot be typed in. */
+  .trip-row .time-at-client {
+    text-align: center;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    color: var(--ink-soft);
+    background: rgba(0,0,0,0.025);
+    border: 1px solid transparent;
+    border-radius: 4px;
+    padding: 7px 4px;
+    user-select: none;
+  }
+  .trip-row .time-at-client.empty { color: var(--muted); }
   .travel-leg {
-    font-size: 11px;
-    color: var(--muted);
+    font-size: 11.5px;
+    color: var(--ink-soft);
     font-family: 'JetBrains Mono', monospace;
     letter-spacing: 0.02em;
     padding: 4px 12px 4px 24px;
     margin: 0 8px;
     font-style: italic;
-    opacity: 0.85;
+    font-weight: 500;
   }
   .trip-row input,
   .trip-row select {
@@ -2572,6 +2586,10 @@
             admin:      noteDefault.slice(),
             additional: noteDefault.slice(),
           }));
+          // Mark that carry-forward has happened for this month, so we don't
+          // re-trigger it later (e.g. if the consultant deliberately deletes
+          // all clients, we respect that choice).
+          if (fresh.clients.length > 0) fresh._clientsCarriedForward = true;
         }
       } catch (e) {
         console.warn('buildFreshMonthFromRoster failed:', e);
@@ -2612,10 +2630,39 @@
             // re-create their clients every month. Visits and notes are blanked.
             const fresh = await buildFreshMonthFromRoster(email, monthKey);
             applyRemoteState(fresh);
+            // Save the carried-forward state back to Firestore so other devices
+            // get the same starting roster, and so the carry-forward flag sticks.
+            if (fresh._clientsCarriedForward) queuePush(fresh);
             setStatus('synced'); updatePillUI();
             return;
           }
           const remote = snap.data();
+
+          // ---- Recovery carry-forward: an existing-but-empty month ----
+          // If a month was opened blank BEFORE the carry-forward feature was
+          // wired, OR before the consultant had built up a prior-month roster,
+          // it persists in Firestore as { clients: [] }. When we see such a
+          // month, AND a prior month has clients, AND we haven't already
+          // carried forward into this month (flag), auto-fill the roster.
+          // This guarantees clients propagate forward even in the edge cases
+          // where the initial "month doesn't exist" carry-forward missed.
+          const hasNoClients = !Array.isArray(remote.clients) || remote.clients.length === 0;
+          const notYetCarriedForward = !remote._clientsCarriedForward;
+          if (hasNoClients && notYetCarriedForward) {
+            const filled = await buildFreshMonthFromRoster(email, monthKey);
+            if (filled.clients && filled.clients.length > 0) {
+              // Preserve any non-client edits the consultant already made
+              // to this month (cover/stats, trips, ccma, bargaining, etc.).
+              const merged = Object.assign({}, remote, {
+                clients: filled.clients,
+                _clientsCarriedForward: true,
+              });
+              applyRemoteState(merged);
+              queuePush(merged);
+              setStatus('synced'); updatePillUI();
+              return;
+            }
+          }
 
           // ---- Echo-suppression: did THIS device produce this snapshot? ----
           // 1. If the snapshot's _sessionId matches our session, it's our echo.
@@ -4255,6 +4302,19 @@
           if (diff >= 0 && diff <= 500) travelKm = diff;
         }
 
+        // Suppress meaningless legs:
+        //   - both km and mins are 0 → no actual travel happened (e.g. two
+        //     attendances at the same venue back-to-back)
+        //   - km is 0 and mins is null → just data-entry noise
+        //   - mins is 0 and km is null → also data-entry noise
+        const kmZero   = travelKm   === 0;
+        const minsZero = travelMins === 0;
+        if ((kmZero && minsZero) ||
+            (kmZero   && travelMins === null) ||
+            (minsZero && travelKm   === null)) {
+          continue;
+        }
+
         if (travelMins !== null || travelKm !== null) {
           result.set(currIdx, { km: travelKm, mins: travelMins });
         }
@@ -4350,6 +4410,7 @@
             <div>Client / Destination</div>
             <div>Arrived at Client</div>
             <div>Left the Client</div>
+            <div>Time at Client</div>
             <div>Odo Start</div>
             <div>Odo End</div>
             <div>KM</div>
@@ -4379,6 +4440,7 @@
                       list="clientNamesList" value="${escapeHtml(t.client)}" />
                     <input type="text" data-trip-field="timeOut" placeholder="08:30" value="${escapeHtml(t.timeOut)}" />
                     <input type="text" data-trip-field="timeBack" placeholder="13:15" value="${escapeHtml(t.timeBack)}" />
+                    <div class="time-at-client ${tripDuration(t) === null ? 'empty' : ''}" title="Time spent at this client (Left − Arrived)">${tripDuration(t) === null ? '—' : escapeHtml(fmtDuration(tripDuration(t)))}</div>
                     <input type="text" data-trip-field="odoStart" placeholder="" value="${escapeHtml(t.odoStart)}" inputmode="decimal" />
                     <input type="text" data-trip-field="odoEnd" placeholder="" value="${escapeHtml(t.odoEnd)}" inputmode="decimal" />
                     <input type="text" data-trip-field="km" class="${derived ? 'km-derived' : ''}"
@@ -4435,6 +4497,15 @@
               kmInput.classList.remove('km-derived');
               kmInput.removeAttribute('readonly');
               kmInput.title = '';
+            }
+          }
+          // If Arrived or Left changed, recompute "Time at Client" display
+          if (field === 'timeOut' || field === 'timeBack') {
+            const cell = row.querySelector('.time-at-client');
+            if (cell) {
+              const d = tripDuration(trip);
+              cell.textContent = d === null ? '—' : fmtDuration(d);
+              cell.classList.toggle('empty', d === null);
             }
           }
           save();
@@ -4582,6 +4653,7 @@
             <div>Client Represented</div>
             <div>Arrived at Client</div>
             <div>Left the Client</div>
+            <div>Time at Client</div>
             <div>Odo Start</div>
             <div>Odo End</div>
             <div>KM</div>
@@ -4607,6 +4679,7 @@
                       list="venueClientList" value="${escapeHtml(e.client)}" />
                     <input type="text" data-vfield="timeOut" placeholder="08:30" value="${escapeHtml(e.timeOut)}" />
                     <input type="text" data-vfield="timeBack" placeholder="13:15" value="${escapeHtml(e.timeBack)}" />
+                    <div class="time-at-client ${tripDuration(e) === null ? 'empty' : ''}" title="Time spent at this client (Left − Arrived)">${tripDuration(e) === null ? '—' : escapeHtml(fmtDuration(tripDuration(e)))}</div>
                     <input type="text" data-vfield="odoStart" value="${escapeHtml(e.odoStart)}" inputmode="decimal" />
                     <input type="text" data-vfield="odoEnd" value="${escapeHtml(e.odoEnd)}" inputmode="decimal" />
                     <input type="text" data-vfield="km" class="${derived ? 'km-derived' : ''}"
@@ -4662,6 +4735,15 @@
               kmInput.classList.remove('km-derived');
               kmInput.removeAttribute('readonly');
               kmInput.title = '';
+            }
+          }
+          // If Arrived or Left changed, recompute "Time at Client" display
+          if (field === 'timeOut' || field === 'timeBack') {
+            const cell = row.querySelector('.time-at-client');
+            if (cell) {
+              const d = tripDuration(entry);
+              cell.textContent = d === null ? '—' : fmtDuration(d);
+              cell.classList.toggle('empty', d === null);
             }
           }
           save();
@@ -5236,8 +5318,8 @@
             children: [new TextRun({
               text: fmtTravelLeg(leg, prevClient),
               italics: true,
-              color: MUTED,
-              size: 16,
+              color: SLATE,
+              size: 17,
               font: "Calibri",
             })],
           })],
@@ -5334,8 +5416,8 @@
             children: [new TextRun({
               text: fmtTravelLeg(leg, prevClient),
               italics: true,
-              color: MUTED,
-              size: 16,
+              color: SLATE,
+              size: 17,
               font: "Calibri",
             })],
           })],
