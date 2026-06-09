@@ -4248,7 +4248,7 @@
           <textarea data-client-list="admin" rows="2">${escapeHtml(arrayToLines(cli.admin))}</textarea>
         </div>
         <div class="field">
-          <label>Additional info</label>
+          <label>General Overview</label>
           <textarea data-client-list="additional" rows="2">${escapeHtml(arrayToLines(cli.additional))}</textarea>
         </div>
       </div>
@@ -5420,7 +5420,7 @@
         { label: "Discipline taken", lines: cli.discipline },
         { label: "Follow-up re discipline", lines: cli.followup },
         { label: "Administration / Payroll", lines: cli.admin },
-        { label: "Additional info", lines: cli.additional },
+        { label: "General Overview", lines: cli.additional },
       ].map((r, i) => {
         const fill = i % 2 ? ROW_ALT : undefined;
         const lines = (r.lines && r.lines.length) ? r.lines : ['—'];
