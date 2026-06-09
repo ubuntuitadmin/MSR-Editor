@@ -1436,6 +1436,31 @@
   }
   .it-report-banner .btn-primary { white-space: nowrap; }
 
+  .admin-maintenance {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    background: var(--paper);
+    border: 1px solid var(--soft-line);
+    border-left: 3px solid var(--accent-soft);
+    border-radius: 8px;
+    padding: 14px 18px;
+    margin-bottom: 24px;
+  }
+  .admin-maintenance-text {
+    flex: 1;
+    font-size: 13px;
+    color: var(--ink-soft);
+    line-height: 1.5;
+  }
+  .admin-maintenance-text strong {
+    display: block;
+    color: var(--ink);
+    font-size: 13.5px;
+    margin-bottom: 2px;
+  }
+  .admin-maintenance .btn-secondary { white-space: nowrap; }
+
   /* IT report editor */
   .it-toolbar {
     display: flex;
@@ -1718,7 +1743,7 @@
 <div class="modal-bg hidden" id="modalBg">
   <div class="modal">
     <h2 id="modalTitle">Confirm</h2>
-    <p id="modalMsg">Are you sure?</p>
+    <p id="modalMsg" style="white-space: pre-wrap;">Are you sure?</p>
     <div class="modal-actions">
       <button class="btn-secondary" id="modalCancel">Cancel</button>
       <button class="btn-primary" id="modalOk">Confirm</button>
@@ -2641,14 +2666,38 @@
           // ---- Recovery carry-forward: an existing-but-empty month ----
           // If a month was opened blank BEFORE the carry-forward feature was
           // wired, OR before the consultant had built up a prior-month roster,
-          // it persists in Firestore as { clients: [] }. When we see such a
-          // month, AND a prior month has clients, AND we haven't already
-          // carried forward into this month (flag), auto-fill the roster.
-          // This guarantees clients propagate forward even in the edge cases
-          // where the initial "month doesn't exist" carry-forward missed.
-          const hasNoClients = !Array.isArray(remote.clients) || remote.clients.length === 0;
+          // it persists in Firestore as { clients: [] } — OR with placeholder
+          // clients that haven't been populated. When we see such a month,
+          // AND a prior month has clients, AND we haven't already carried
+          // forward into this month (flag), auto-fill the roster.
+          //
+          // "Effectively empty" means: no clients at all, OR every client
+          // looks like an untouched default placeholder. A placeholder has:
+          //   - blank/missing name, OR the literal default name "New Client"
+          //   - no contact, tel, head count, frequency, or type
+          // As soon as the consultant has typed in real data, we leave it alone.
+          const PLACEHOLDER_NAMES = new Set(['', 'new client', 'untitled', 'untitled client']);
+          const isPlaceholderClient = (c) => {
+            if (!c || typeof c !== 'object') return true;
+            const name = String(c.name || '').trim().toLowerCase();
+            if (!PLACEHOLDER_NAMES.has(name)) return false;
+            // Name matches placeholder — but also require that all other
+            // identity fields are empty, so we don't wipe a consultant who
+            // happened to have a client literally called "New Client".
+            const hasIdentity = (
+              String(c.contact   || '').trim() ||
+              String(c.tel       || '').trim() ||
+              String(c.headCount || '').trim() ||
+              String(c.frequency || '').trim() ||
+              String(c.type      || '').trim()
+            );
+            return !hasIdentity;
+          };
+          const clientList = Array.isArray(remote.clients) ? remote.clients : [];
+          const allPlaceholders = clientList.every(isPlaceholderClient);
+          const effectivelyEmpty = clientList.length === 0 || allPlaceholders;
           const notYetCarriedForward = !remote._clientsCarriedForward;
-          if (hasNoClients && notYetCarriedForward) {
+          if (effectivelyEmpty && notYetCarriedForward) {
             const filled = await buildFreshMonthFromRoster(email, monthKey);
             if (filled.clients && filled.clients.length > 0) {
               // Preserve any non-client edits the consultant already made
@@ -3134,21 +3183,33 @@
   }
 
   // ----- Confirm modal -----
-  function confirmDialog(title, msg) {
+  function confirmDialog(title, msg, opts) {
+    opts = opts || {};
     return new Promise(resolve => {
       const bg = document.getElementById('modalBg');
       document.getElementById('modalTitle').textContent = title;
       document.getElementById('modalMsg').textContent = msg;
+      // Restore default visibility of cancel before each call
+      const cancelBtn = document.getElementById('modalCancel');
+      const okBtn = document.getElementById('modalOk');
+      if (opts.okOnly) {
+        cancelBtn.style.display = 'none';
+        okBtn.textContent = 'OK';
+      } else {
+        cancelBtn.style.display = '';
+        okBtn.textContent = 'OK';
+      }
       bg.classList.remove('hidden');
       const ok = () => { cleanup(); resolve(true); };
       const cancel = () => { cleanup(); resolve(false); };
       const cleanup = () => {
         bg.classList.add('hidden');
-        document.getElementById('modalOk').removeEventListener('click', ok);
-        document.getElementById('modalCancel').removeEventListener('click', cancel);
+        okBtn.removeEventListener('click', ok);
+        cancelBtn.removeEventListener('click', cancel);
+        cancelBtn.style.display = ''; // restore for next caller
       };
-      document.getElementById('modalOk').addEventListener('click', ok);
-      document.getElementById('modalCancel').addEventListener('click', cancel);
+      okBtn.addEventListener('click', ok);
+      cancelBtn.addEventListener('click', cancel);
     });
   }
 
@@ -3346,6 +3407,150 @@
   // Cross-team summary + drill-down into individual consultants.
   // Called when an admin signs in (and via "Back to dashboard" button).
   let adminDashboardMonth = null;
+
+  // Proactively repair every consultant's stuck months. A "stuck" month is one
+  // that's stored in Firestore but contains only placeholder clients AND has
+  // no _clientsCarriedForward flag AND has a prior month with real clients.
+  // Uses the same is-placeholder logic as the on-the-fly recovery.
+  async function repairAllMonths() {
+    const btn = document.getElementById('repairMonthsBtn');
+    const ok = await confirmDialog(
+      'Repair all months?',
+      "This scans every consultant's reports for months that opened blank and never carried clients forward from the previous month. For each one, it fills in the prior month's client roster (visits and notes stay blank).\n\nIt's safe: it only touches months where clients are still placeholders. It never overwrites real data.\n\nProceed?"
+    );
+    if (!ok) return;
+
+    btn.disabled = true;
+    btn.textContent = 'Scanning…';
+
+    const libs = CloudSync._libs && CloudSync._libs();
+    const db = CloudSync._db && CloudSync._db();
+    if (!libs || !db) {
+      btn.disabled = false;
+      btn.textContent = 'Repair all months';
+      toast('Not connected — cannot run repair.', true);
+      return;
+    }
+
+    // Same placeholder logic as in the on-the-fly recovery, kept in sync.
+    const PLACEHOLDER_NAMES = new Set(['', 'new client', 'untitled', 'untitled client']);
+    const isPlaceholderClient = (c) => {
+      if (!c || typeof c !== 'object') return true;
+      const name = String(c.name || '').trim().toLowerCase();
+      if (!PLACEHOLDER_NAMES.has(name)) return false;
+      const hasIdentity = (
+        String(c.contact   || '').trim() ||
+        String(c.tel       || '').trim() ||
+        String(c.headCount || '').trim() ||
+        String(c.frequency || '').trim() ||
+        String(c.type      || '').trim()
+      );
+      return !hasIdentity;
+    };
+
+    const stats = { consultantsScanned: 0, monthsScanned: 0, monthsRepaired: 0, errors: [] };
+
+    try {
+      // List every consultant
+      const users = await CloudSync.listAllUsers();
+      for (const user of users) {
+        stats.consultantsScanned++;
+        btn.textContent = `Scanning ${user.displayName || user.email}…`;
+
+        let monthKeys;
+        try {
+          monthKeys = await CloudSync.listConsultantMonths(user.email);
+        } catch (e) {
+          stats.errors.push(`${user.email}: could not list months (${e.message || e})`);
+          continue;
+        }
+        if (!monthKeys || monthKeys.length === 0) continue;
+        monthKeys.sort(); // ascending — earliest first
+
+        // For each month, load it and assess whether it qualifies for repair
+        for (let i = 0; i < monthKeys.length; i++) {
+          const monthKey = monthKeys[i];
+          stats.monthsScanned++;
+          try {
+            const remote = await CloudSync.loadConsultantMonth(user.email, monthKey);
+            if (!remote) continue;
+
+            if (remote._clientsCarriedForward) continue;
+            const clientList = Array.isArray(remote.clients) ? remote.clients : [];
+            const allPlaceholders = clientList.every(isPlaceholderClient);
+            const effectivelyEmpty = clientList.length === 0 || allPlaceholders;
+            if (!effectivelyEmpty) continue;
+
+            // Find the most recent prior month for this consultant that has
+            // real (non-placeholder) clients. We walk backwards through monthKeys
+            // looking at months earlier than this one.
+            let priorRoster = null;
+            for (let j = i - 1; j >= 0; j--) {
+              const priorKey = monthKeys[j];
+              const prior = await CloudSync.loadConsultantMonth(user.email, priorKey);
+              if (!prior || !Array.isArray(prior.clients)) continue;
+              const real = prior.clients.filter(c => !isPlaceholderClient(c));
+              if (real.length > 0) {
+                priorRoster = real;
+                break;
+              }
+            }
+            if (!priorRoster) continue; // no usable prior month — skip
+
+            // Build the carry-forward roster (identity fields only, notes/visits blank)
+            const noteDefault = ['Not at this time.'];
+            const carried = priorRoster.map(c => ({
+              name:      c.name      || '',
+              contact:   c.contact   || '',
+              tel:       c.tel       || '',
+              headCount: c.headCount || '',
+              frequency: c.frequency || '',
+              type:      c.type      || '',
+              visits: [],
+              discipline: noteDefault.slice(),
+              followup:   noteDefault.slice(),
+              admin:      noteDefault.slice(),
+              additional: noteDefault.slice(),
+            }));
+
+            // Merge: keep all of remote's existing fields (cover/stats/trips/
+            // ccma/bargaining), replace clients, mark as carried-forward.
+            const merged = Object.assign({}, remote, {
+              clients: carried,
+              _clientsCarriedForward: true,
+              _updatedAt: Date.now(),
+              _updatedBy: (CloudSync.getCurrentUser() || {}).email || 'admin',
+              _updatedAtServer: libs.serverTimestamp(),
+            });
+
+            const ref = libs.doc(db, 'users', user.email, 'reports', monthKey);
+            await libs.setDoc(ref, merged, { merge: false });
+            stats.monthsRepaired++;
+          } catch (e) {
+            stats.errors.push(`${user.email}/${monthKey}: ${e.message || e}`);
+          }
+        }
+      }
+
+      // Final summary
+      const summary =
+        `Scanned ${stats.consultantsScanned} consultant${stats.consultantsScanned === 1 ? '' : 's'}, ` +
+        `${stats.monthsScanned} month${stats.monthsScanned === 1 ? '' : 's'}.\n\n` +
+        `Repaired: ${stats.monthsRepaired} month${stats.monthsRepaired === 1 ? '' : 's'}.\n` +
+        (stats.errors.length
+          ? `\nErrors (${stats.errors.length}):\n  • ${stats.errors.slice(0, 8).join('\n  • ')}${stats.errors.length > 8 ? `\n  …and ${stats.errors.length - 8} more` : ''}`
+          : '\nNo errors.');
+      await confirmDialog('Repair complete', summary, { okOnly: true });
+      toast(`Repaired ${stats.monthsRepaired} month${stats.monthsRepaired === 1 ? '' : 's'}.`);
+    } catch (e) {
+      console.warn('Repair failed:', e);
+      toast('Repair failed: ' + (e.message || e), true);
+    } finally {
+      btn.disabled = false;
+      btn.textContent = 'Repair all months';
+    }
+  }
+
   async function renderAdminDashboard() {
     const c = document.getElementById('content');
     const title = document.getElementById('viewTitle');
@@ -3373,6 +3578,14 @@
             <div class="it-report-banner-sub">Maintain and generate your monthly IT department report. Stored by month in history.</div>
           </div>
           <button class="btn-primary" id="openItReportBtn">Open IT Report →</button>
+        </div>
+
+        <div class="admin-maintenance">
+          <div class="admin-maintenance-text">
+            <strong>Repair stuck months</strong>
+            <span>Scans every consultant for months that opened blank and never picked up the previous month's client roster. Fills them in. Safe to run any time — only touches months that match the conditions; never overwrites real data.</span>
+          </div>
+          <button class="btn-secondary btn-sm" id="repairMonthsBtn">Repair all months</button>
         </div>
 
         <div class="admin-month-bar">
@@ -3415,6 +3628,8 @@
     document.getElementById('openItReportBtn').addEventListener('click', () => {
       ITReport.open();
     });
+
+    document.getElementById('repairMonthsBtn').addEventListener('click', repairAllMonths);
 
     // Build month picker options (current month back through last 24 months — enough for typical history)
     const picker = document.getElementById('adminMonthPicker');
