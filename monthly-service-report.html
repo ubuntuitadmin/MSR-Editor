@@ -581,7 +581,7 @@
 
   .trip-list-header {
     display: grid;
-    grid-template-columns: 100px minmax(130px, 1.4fr) 110px 110px 76px 90px 90px 76px minmax(110px, 1.5fr) 70px;
+    grid-template-columns: 100px minmax(140px, 1.6fr) 110px 110px 90px 90px 76px minmax(110px, 1.5fr) 70px;
     gap: 6px;
     padding: 8px 10px;
     font-size: 10px;
@@ -594,7 +594,7 @@
   }
   .trip-row {
     display: grid;
-    grid-template-columns: 100px minmax(130px, 1.4fr) 110px 110px 76px 90px 90px 76px minmax(110px, 1.5fr) 70px;
+    grid-template-columns: 100px minmax(140px, 1.6fr) 110px 110px 90px 90px 76px minmax(110px, 1.5fr) 70px;
     gap: 6px;
     padding: 6px 8px;
     background: var(--cream);
@@ -605,30 +605,6 @@
     transition: border-color 0.15s, background 0.15s;
   }
   .trip-row:focus-within { border-color: var(--accent-soft); background: #FBF7F1; }
-  /* Read-only "Time at Client" cell — visually distinct from inputs since it's
-     auto-computed from Arrived/Left times and cannot be typed in. */
-  .trip-row .time-at-client {
-    text-align: center;
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 12px;
-    color: var(--ink-soft);
-    background: rgba(0,0,0,0.025);
-    border: 1px solid transparent;
-    border-radius: 4px;
-    padding: 7px 4px;
-    user-select: none;
-  }
-  .trip-row .time-at-client.empty { color: var(--muted); }
-  .travel-leg {
-    font-size: 11.5px;
-    color: var(--ink-soft);
-    font-family: 'JetBrains Mono', monospace;
-    letter-spacing: 0.02em;
-    padding: 4px 12px 4px 24px;
-    margin: 0 8px;
-    font-style: italic;
-    font-weight: 500;
-  }
   .trip-row input,
   .trip-row select {
     background: #fff;
@@ -827,23 +803,12 @@
     color: #3C4043;
     cursor: pointer;
     transition: box-shadow 0.15s, border-color 0.15s;
-    /* iOS Safari fixes: ensure the button reliably receives taps and there's
-       no 300ms click delay. Without these, the SVG child can intercept the
-       tap event and prevent the button's click handler from firing. */
-    touch-action: manipulation;
-    -webkit-tap-highlight-color: rgba(0,0,0,0.04);
-    position: relative;
-    z-index: 1;
   }
   .btn-google:hover {
     box-shadow: 0 1px 3px rgba(60,64,67,0.15);
     border-color: #C8CCD0;
   }
-  /* Critical fix: SVG inside button must NOT capture taps on iOS Safari.
-     Without pointer-events:none, tapping the icon registers on the SVG (or
-     the button's parent) rather than the button itself, breaking the click
-     handler. This was the root cause of iPhone sign-in failures. */
-  .btn-google svg { width: 18px; height: 18px; pointer-events: none; }
+  .btn-google svg { width: 18px; height: 18px; }
 
   /* Drive setup hint (shown when CLIENT_ID not configured) */
   .drive-setup-hint {
@@ -1174,8 +1139,79 @@
     font-size: 13px;
     margin-top: 20px;
     text-align: left;
+    overflow-wrap: anywhere;
+    word-break: break-word;
   }
   .signin-error.hidden { display: none; }
+  .signin-alt {
+    display: block;
+    width: 100%;
+    margin-top: 14px;
+    padding: 12px 14px;
+    background: transparent;
+    border: 1px solid var(--border, #D8D2C7);
+    border-radius: 8px;
+    color: var(--ink-soft, #4A5568);
+    font: inherit;
+    font-size: 13.5px;
+    font-weight: 600;
+    cursor: pointer;
+    min-height: 44px;
+  }
+  .signin-alt:hover { background: rgba(0,0,0,0.03); }
+  .signin-alt.hidden { display: none; }
+  .signin-webview {
+    margin-top: 20px;
+    padding: 14px;
+    border-radius: 8px;
+    background: rgba(200, 85, 61, 0.08);
+    border: 1px solid rgba(200, 85, 61, 0.28);
+    text-align: left;
+  }
+  .signin-webview.hidden { display: none; }
+  .signin-webview strong {
+    display: block;
+    font-size: 14px;
+    margin-bottom: 6px;
+    color: #A8412C;
+  }
+  .signin-webview span {
+    display: block;
+    font-size: 12.5px;
+    line-height: 1.5;
+    color: var(--ink-soft, #4A5568);
+    margin-bottom: 12px;
+  }
+  .signin-webview-btn {
+    display: block;
+    width: 100%;
+    min-height: 44px;
+    padding: 11px 14px;
+    margin-top: 8px;
+    border: none;
+    border-radius: 8px;
+    background: #C8553D;
+    color: #fff;
+    font: inherit;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  .signin-webview-btn.ghost {
+    background: transparent;
+    color: var(--ink-soft, #4A5568);
+    border: 1px solid rgba(200, 85, 61, 0.35);
+  }
+  .signin-diag {
+    margin: 14px 0 0;
+    font-family: 'JetBrains Mono', ui-monospace, monospace;
+    font-size: 10.5px;
+    line-height: 1.5;
+    color: var(--muted, #718096);
+    text-align: left;
+    word-break: break-all;
+  }
+  .signin-diag.hidden { display: none; }
   .signin-foot {
     color: var(--muted);
     font-size: 12px;
@@ -1436,31 +1472,6 @@
   }
   .it-report-banner .btn-primary { white-space: nowrap; }
 
-  .admin-maintenance {
-    display: flex;
-    align-items: center;
-    gap: 16px;
-    background: var(--paper);
-    border: 1px solid var(--soft-line);
-    border-left: 3px solid var(--accent-soft);
-    border-radius: 8px;
-    padding: 14px 18px;
-    margin-bottom: 24px;
-  }
-  .admin-maintenance-text {
-    flex: 1;
-    font-size: 13px;
-    color: var(--ink-soft);
-    line-height: 1.5;
-  }
-  .admin-maintenance-text strong {
-    display: block;
-    color: var(--ink);
-    font-size: 13.5px;
-    margin-bottom: 2px;
-  }
-  .admin-maintenance .btn-secondary { white-space: nowrap; }
-
   /* IT report editor */
   .it-toolbar {
     display: flex;
@@ -1609,8 +1620,16 @@
       </svg>
       Sign in with Google
     </button>
+    <div class="signin-webview hidden" id="signInWebviewWarn">
+      <strong>Open this in Chrome</strong>
+      <span>This link opened inside another app's built-in browser. Google does not allow sign-in here — it has to be Chrome (or Samsung Internet / Firefox).</span>
+      <button class="signin-webview-btn" id="openInChromeBtn" type="button">Open in Chrome</button>
+      <button class="signin-webview-btn ghost" id="copyLinkBtn" type="button">Copy link instead</button>
+    </div>
     <p class="signin-error hidden" id="signInError"></p>
+    <button class="signin-alt hidden" id="signInRedirectBtn" type="button">Having trouble? Sign in without a pop-up →</button>
     <p class="signin-foot">If you don't have access, please contact your Ubuntu administrator.</p>
+    <p class="signin-diag hidden" id="signInDiag"></p>
   </div>
 </div>
 
@@ -1694,6 +1713,8 @@
 <!-- Sticky action bar -->
 <div class="action-bar">
   <div class="info" id="actionInfo"></div>
+  <button class="btn-secondary btn-sm" id="clearMonthBtn" title="Clear visits, journeys, summaries, head counts and monthly cover stats — keeps your client list and consultant details">Clear monthly data</button>
+  <button class="btn-secondary btn-sm" id="resetBtn">Reset to blank template</button>
   <button class="btn-primary" id="generateBtn">Generate Word Report</button>
 </div>
 
@@ -1743,7 +1764,7 @@
 <div class="modal-bg hidden" id="modalBg">
   <div class="modal">
     <h2 id="modalTitle">Confirm</h2>
-    <p id="modalMsg" style="white-space: pre-wrap;">Are you sure?</p>
+    <p id="modalMsg">Are you sure?</p>
     <div class="modal-actions">
       <button class="btn-secondary" id="modalCancel">Cancel</button>
       <button class="btn-primary" id="modalOk">Confirm</button>
@@ -2353,6 +2374,9 @@
     let currentMonth  = currentMonthKey();  // "YYYY-MM"
     let status        = 'signed-out'; // signed-out | loading | syncing | synced | error | offline
 
+    let uiWired       = false;  // guard: wireUI() may be called twice on a partial init failure
+    const REDIRECT_FLAG = 'msr_redirect_pending';  // sessionStorage marker for the redirect round trip
+
     let pushTimer     = null;
     let pendingState  = null;
     let pullInFlight  = false;
@@ -2405,19 +2429,20 @@
         // Use device language for sign-in UI
         try { auth.useDeviceLanguage(); } catch (e) {}
 
-        // If the user just came back from Google's sign-in page (via redirect),
-        // complete that flow before wiring the rest of the UI. onAuthStateChanged
-        // will fire with the resulting user.
+        // ---- Persistence ladder ------------------------------------------
+        // iOS Safari Private Browsing (and some locked-down Android browsers)
+        // throw when Firebase tries to open IndexedDB / localStorage. Without
+        // this ladder the whole auth module dies before the sign-in button is
+        // even wired up, which looks exactly like "the site won't open".
         try {
-          if (typeof firebaseLibs.getRedirectResult === 'function') {
-            await firebaseLibs.getRedirectResult(auth);
-          }
-        } catch (e) {
-          console.warn('Redirect sign-in completion error:', e);
-          // Surface a friendly message; the auth state listener below will still
-          // run and either keep us signed out or pick up a successful sign-in.
-          if (e && e.code && e.code !== 'auth/no-auth-event') {
-            showSignInError(e.message || 'Sign-in was interrupted. Please try again.');
+          await firebaseLibs.setPersistence(auth, firebaseLibs.browserLocalPersistence);
+        } catch (e1) {
+          console.warn('Local persistence unavailable, falling back:', e1);
+          try {
+            await firebaseLibs.setPersistence(auth, firebaseLibs.browserSessionPersistence);
+          } catch (e2) {
+            try { await firebaseLibs.setPersistence(auth, firebaseLibs.inMemoryPersistence); }
+            catch (e3) { console.warn('No auth persistence available:', e3); }
           }
         }
 
@@ -2425,16 +2450,169 @@
         firebaseLibs.onAuthStateChanged(auth, onAuthChange);
 
         wireUI();
+
+        // ---- Complete a redirect sign-in ---------------------------------
+        // If the user came back from signInWithRedirect, the credential is in
+        // the URL and must be consumed here or the sign-in silently evaporates.
+        let redirectWasPending = false;
+        try { redirectWasPending = sessionStorage.getItem(REDIRECT_FLAG) === '1'; } catch (e) {}
+        try {
+          const res = await firebaseLibs.getRedirectResult(auth);
+          if (!res && redirectWasPending) {
+            // Came back from Google but no credential survived the round trip.
+            // Classic third-party-storage block: the app is on one domain and
+            // authDomain is on another (see AUTH-FIX-NOTES.md).
+            showSignInError(
+              'Google sent you back, but this browser blocked the sign-in from completing. ' +
+              'This happens on iPhone/Safari when the app is not hosted on the same domain as Firebase Auth. ' +
+              'Try the "Sign in with Google" button above (pop-up mode), or ask your administrator to move the app onto the Firebase Hosting domain.'
+            );
+            showDiag('redirect returned no credential');
+          }
+        } catch (e) {
+          console.warn('getRedirectResult failed:', e);
+          showSignInError(authErrorText(e));
+          showDiag(e && e.code);
+        } finally {
+          try { sessionStorage.removeItem(REDIRECT_FLAG); } catch (e) {}
+        }
       } catch (e) {
         console.warn('Firebase init failed:', e);
-        showSignInScreen('Could not load Firebase. Please check your internet connection and reload.');
+        showSignInScreen('Could not start the sign-in system on this device. ' + authErrorText(e));
+        showDiag(e && (e.code || e.message));
+        // Make sure the button still works even if init partially failed.
+        try { wireUI(); } catch (e2) {}
       }
     }
 
+    // Plain-English mapping for the auth error codes that actually show up in
+    // the field. Anything unrecognised falls through to the raw message so a
+    // consultant can read it out over the phone.
+    function authErrorText(e) {
+      const code = (e && e.code) || '';
+      switch (code) {
+        case 'auth/unauthorized-domain':
+          return 'This web address is not on the Firebase "Authorized domains" list. An administrator needs to add ' +
+                 (location.hostname || 'this domain') + ' in Firebase Console → Authentication → Settings → Authorized domains.';
+        case 'auth/popup-blocked':
+          return 'Your browser blocked the Google sign-in pop-up. Use the "Sign in without a pop-up" button below.';
+        case 'auth/popup-closed-by-user':
+          return 'The sign-in window closed before you finished. Tap "Sign in with Google" to try again.';
+        case 'auth/cancelled-popup-request':
+          return 'Another sign-in attempt was already running. Tap "Sign in with Google" once and wait.';
+        case 'auth/operation-not-supported-in-this-environment':
+          return 'This browser cannot run pop-up sign-in. Use the "Sign in without a pop-up" button below.';
+        case 'auth/web-storage-unsupported':
+          return 'This browser is blocking cookies/storage for this site. Turn off Private Browsing, or allow cookies for this site, then reload.';
+        case 'auth/network-request-failed':
+          return 'No usable connection to Google. Check mobile data or Wi-Fi and try again.';
+        case 'auth/internal-error':
+          return 'The sign-in service returned an unexpected error. Try the "Sign in without a pop-up" button below.';
+        default:
+          return (e && e.message) || 'Sign-in failed. Please try again.';
+      }
+    }
+
+    // ----- Embedded / in-app browser detection -------------------------------
+    // On Android, tapping a link inside WhatsApp, Gmail, Teams, Facebook,
+    // Instagram or LinkedIn opens an embedded WebView rather than Chrome.
+    // Google's OAuth endpoint rejects those outright, so sign-in can never
+    // succeed there no matter which Firebase method we use.
+    function isEmbeddedWebView() {
+      const ua = navigator.userAgent || '';
+      const isAndroid = /Android/i.test(ua);
+
+      // Android System WebView always carries "; wv)" in the UA.
+      if (isAndroid && /;\s*wv\)/i.test(ua)) return true;
+
+      // Known in-app browser signatures (both platforms).
+      if (/\b(FBAN|FBAV|FB_IAB|Instagram|Line\/|MicroMessenger|Twitter|LinkedInApp|WhatsApp|Snapchat|GSA\/)/i.test(ua)) return true;
+
+      // Android Chrome always advertises "Chrome/"; a Chromium-based WebView
+      // that hides it is not a real browser.
+      if (isAndroid && /Version\/[\d.]+/.test(ua) && !/Chrome\//.test(ua)) return true;
+
+      // iOS: a real browser is Safari/CriOS/FxiOS/EdgiOS. Anything else on
+      // WebKit with no Safari token is a WKWebView.
+      if (/iPhone|iPad|iPod/i.test(ua) && !/Safari|CriOS|FxiOS|EdgiOS/i.test(ua)) return true;
+
+      return false;
+    }
+
+    function openInRealBrowser() {
+      const url = location.href;
+      if (/Android/i.test(navigator.userAgent || '')) {
+        // Android intent: hand the URL to Chrome explicitly. If Chrome is not
+        // installed the browser_fallback_url reopens it however it can.
+        const bare = url.replace(/^https?:\/\//, '');
+        const intent = 'intent://' + bare +
+                       '#Intent;scheme=https;package=com.android.chrome;' +
+                       'S.browser_fallback_url=' + encodeURIComponent(url) + ';end';
+        window.location.href = intent;
+        return;
+      }
+      // iOS and everything else: no reliable programmatic hand-off, so fall
+      // back to copying the link.
+      copyAppLink();
+    }
+
+    async function copyAppLink() {
+      const url = location.href;
+      const btn = document.getElementById('copyLinkBtn');
+      const done = (ok) => {
+        if (!btn) return;
+        btn.textContent = ok ? 'Link copied — paste it into Chrome' : url;
+        if (!ok) btn.style.userSelect = 'text';
+      };
+      try {
+        await navigator.clipboard.writeText(url);
+        done(true);
+      } catch (e) {
+        done(false);
+      }
+    }
+
+    function showDiag(detail) {
+      const el = document.getElementById('signInDiag');
+      if (!el) return;
+      el.textContent = 'host: ' + location.hostname +
+                       '  ·  authDomain: ' + (firebaseConfig.authDomain || '—') +
+                       (detail ? ('  ·  ' + detail) : '');
+      el.classList.remove('hidden');
+    }
+
     function wireUI() {
+      if (uiWired) return;
+      uiWired = true;
+
       // Sign-in screen button
       const signInBtn = document.getElementById('signInBtn');
       if (signInBtn) signInBtn.addEventListener('click', signIn);
+
+      // Escape hatch for browsers that will not open a pop-up at all
+      // (in-app browsers inside WhatsApp / Gmail / Teams, locked-down Safari).
+      // Android in-app browser escape hatch. Google refuses OAuth inside
+      // embedded WebViews (403 disallowed_useragent, "this browser or app may
+      // not be secure"), so no amount of popup/redirect logic can save it —
+      // the only fix is to reopen the page in a real browser.
+      if (isEmbeddedWebView()) {
+        const warn = document.getElementById('signInWebviewWarn');
+        if (warn) warn.classList.remove('hidden');
+        const chromeBtn = document.getElementById('openInChromeBtn');
+        if (chromeBtn) chromeBtn.addEventListener('click', openInRealBrowser);
+        const copyBtn = document.getElementById('copyLinkBtn');
+        if (copyBtn) copyBtn.addEventListener('click', copyAppLink);
+        showDiag('embedded webview detected');
+      }
+
+      const redirectBtn = document.getElementById('signInRedirectBtn');
+      if (redirectBtn) {
+        redirectBtn.addEventListener('click', signInViaRedirect);
+        // On phones and tablets, show it up front — pop-up sign-in is the
+        // flaky path there, so the consultant should never have to guess.
+        const isTouch = window.matchMedia && window.matchMedia('(pointer: coarse)').matches;
+        if (isTouch) redirectBtn.classList.remove('hidden');
+      }
 
       // Account pill in the toolbar opens the account modal
       const acctPill = document.getElementById('accountPill');
@@ -2455,49 +2633,72 @@
       window.addEventListener('offline', () => setStatus('offline'));
     }
 
-    // True on phones / tablets where popup-based sign-in is unreliable
-    // (especially iOS Safari, which blocks popups very aggressively, and
-    // PWAs/in-app browsers where popups don't work at all).
-    function isMobileDevice() {
-      const ua = navigator.userAgent || '';
-      // Catch iPhone/iPad/iPod plus Android, and also iPadOS which now
-      // reports as Mac but with touch support.
-      if (/iPhone|iPad|iPod|Android|Mobile/i.test(ua)) return true;
-      if (navigator.maxTouchPoints > 1 && /Macintosh/.test(ua)) return true;
-      return false;
+    // ----- Authentication -----
+    function makeProvider() {
+      const provider = new firebaseLibs.GoogleAuthProvider();
+      // Always let the user pick which Google account — otherwise a phone that
+      // is signed into a personal Gmail silently authenticates the wrong one
+      // and then hits the Firestore rules wall.
+      provider.setCustomParameters({ prompt: 'select_account' });
+      return provider;
     }
 
-    // ----- Authentication -----
+    // Pop-up failures we can automatically retry as a full-page redirect.
+    // 'popup-closed-by-user' is deliberately NOT here: on desktop that means
+    // the person genuinely cancelled, and hijacking the page would be rude.
+    const POPUP_FAILURE_CODES = [
+      'auth/popup-blocked',
+      'auth/cancelled-popup-request',
+      'auth/operation-not-supported-in-this-environment',
+      'auth/internal-error',
+      'auth/timeout',
+    ];
+
     async function signIn() {
+      if (!auth || !firebaseLibs) {
+        showSignInError('The sign-in system has not finished loading. Please wait a moment and try again.');
+        return;
+      }
+      hideSignInError();
       try {
         setStatus('loading'); updatePillUI();
-        const provider = new firebaseLibs.GoogleAuthProvider();
-
-        // On mobile devices, popup sign-in is unreliable (iOS Safari blocks it,
-        // some in-app browsers ignore it). Use full-page redirect instead.
-        if (isMobileDevice()) {
-          await firebaseLibs.signInWithRedirect(auth, provider);
-          // The browser navigates away; control returns when Google redirects
-          // back to this page and getRedirectResult() runs during init().
-          return;
-        }
-
-        // Desktop: popup is a nicer UX. If it's blocked for any reason
-        // (popup-blocker, embedded view, etc.), fall back to redirect.
-        try {
-          await firebaseLibs.signInWithPopup(auth, provider);
-        } catch (popupErr) {
-          const code = popupErr && popupErr.code;
-          if (code === 'auth/popup-blocked' || code === 'auth/popup-closed-by-user' || code === 'auth/operation-not-supported-in-this-environment') {
-            // Fall back to redirect
-            await firebaseLibs.signInWithRedirect(auth, provider);
-            return;
-          }
-          throw popupErr;
-        }
+        await firebaseLibs.signInWithPopup(auth, makeProvider());
+        // onAuthChange will fire next
       } catch (e) {
-        console.warn('Sign-in failed:', e);
-        showSignInError(e.message || 'Sign-in was cancelled or failed. Please try again.');
+        console.warn('Sign-in (popup) failed:', e);
+        const code = (e && e.code) || '';
+
+        if (POPUP_FAILURE_CODES.indexOf(code) !== -1) {
+          // The pop-up never opened — go straight to the redirect flow.
+          setStatus('signed-out'); updatePillUI();
+          return signInViaRedirect();
+        }
+
+        showSignInError(authErrorText(e));
+        showDiag(code);
+        // Offer the manual escape hatch for anything pop-up shaped.
+        if (code.indexOf('popup') !== -1 || code === 'auth/web-storage-unsupported') {
+          const alt = document.getElementById('signInRedirectBtn');
+          if (alt) alt.classList.remove('hidden');
+        }
+        setStatus('signed-out'); updatePillUI();
+      }
+    }
+
+    async function signInViaRedirect() {
+      if (!auth || !firebaseLibs) return;
+      hideSignInError();
+      try {
+        setStatus('loading'); updatePillUI();
+        try { sessionStorage.setItem(REDIRECT_FLAG, '1'); } catch (e) {}
+        await firebaseLibs.signInWithRedirect(auth, makeProvider());
+        // The browser navigates away here; getRedirectResult() in init()
+        // picks the credential back up when we return.
+      } catch (e) {
+        console.warn('Sign-in (redirect) failed:', e);
+        try { sessionStorage.removeItem(REDIRECT_FLAG); } catch (e2) {}
+        showSignInError(authErrorText(e));
+        showDiag(e && e.code);
         setStatus('signed-out'); updatePillUI();
       }
     }
@@ -2572,74 +2773,12 @@
 
     // ----- Loading a specific consultant's month -----
     // Used by both consultants (their own) and admins (drilling into someone)
-    // Build a fresh state for a month that doesn't yet have a stored report.
-    // Carries forward each client's identity (name, contact, tel, headCount,
-    // frequency, type) from the consultant's most recent prior month, but
-    // resets all per-month activity (visits, discipline/followup/admin/
-    // additional notes) so the consultant starts the month with a clean slate.
-    async function buildFreshMonthFromRoster(email, monthKey) {
-      const fresh = JSON.parse(JSON.stringify(DEFAULT_STATE));
-      fresh._month = monthKey;
-      fresh._owner = email;
-      try {
-        // Find the most recent month with stored data for this consultant
-        const months = await listConsultantMonths(email);
-        const priorMonths = months.filter(m => m < monthKey).sort().reverse();
-        if (priorMonths.length === 0) return fresh; // no prior data — blank start
-
-        const priorMonth = priorMonths[0];
-        const priorRef = firebaseLibs.doc(db, 'users', email, 'reports', priorMonth);
-        const priorSnap = await firebaseLibs.getDoc(priorRef);
-        if (!priorSnap.exists()) return fresh;
-        const prior = priorSnap.data();
-
-        // Carry forward only the IDENTITY fields of each client.
-        // Activity (visits, notes) is per-month and starts fresh.
-        const noteDefault = ['Not at this time.'];
-        if (Array.isArray(prior.clients)) {
-          fresh.clients = prior.clients.map(c => ({
-            name:      c.name      || '',
-            contact:   c.contact   || '',
-            tel:       c.tel       || '',
-            headCount: c.headCount || '',
-            frequency: c.frequency || '',
-            type:      c.type      || '',
-            // Per-month activity reset to defaults
-            visits: [],
-            discipline: noteDefault.slice(),
-            followup:   noteDefault.slice(),
-            admin:      noteDefault.slice(),
-            additional: noteDefault.slice(),
-          }));
-          // Mark that carry-forward has happened for this month, so we don't
-          // re-trigger it later (e.g. if the consultant deliberately deletes
-          // all clients, we respect that choice).
-          if (fresh.clients.length > 0) fresh._clientsCarriedForward = true;
-        }
-      } catch (e) {
-        console.warn('buildFreshMonthFromRoster failed:', e);
-      }
-      return fresh;
-    }
-
     async function loadMonth(monthKey, targetEmail) {
       const email = targetEmail || viewingEmail || (currentUser && currentUser.email);
       if (!email || !monthKey) return;
-      const switchedMonth = (currentMonth !== monthKey) || (viewingEmail !== email);
       currentMonth = monthKey;
       viewingEmail = email;
       setStatus('loading'); updatePillUI();
-
-      // Show an immediate "Loading…" placeholder so the user never sees stale
-      // or blank content while the Firestore snapshot is in flight. The real
-      // render will happen automatically when applyRemoteState fires.
-      if (switchedMonth) {
-        const c = document.getElementById('content');
-        if (c) c.innerHTML = '<div class="stats-empty" style="margin-top:40px;">Loading ' + escapeHtml(monthKey) + '…</div>';
-        // Also clear the stale invalidation timestamp so the next snapshot is
-        // never mistaken for our own echo (which would suppress the render).
-        lastWriteTimestamp = 0;
-      }
 
       // Tear down any previous live subscription
       if (unsubReport) { unsubReport(); unsubReport = null; }
@@ -2647,71 +2786,17 @@
       try {
         const ref = firebaseLibs.doc(db, 'users', email, 'reports', monthKey);
         // Live subscription — auto-updates when another device saves
-        unsubReport = firebaseLibs.onSnapshot(ref, async (snap) => {
+        unsubReport = firebaseLibs.onSnapshot(ref, (snap) => {
           if (!snap.exists()) {
-            // No report for this month yet — start fresh, but carry forward the
-            // client roster (name, contact, head count, type, payroll freq)
-            // from the most recent prior month so consultants don't have to
-            // re-create their clients every month. Visits and notes are blanked.
-            const fresh = await buildFreshMonthFromRoster(email, monthKey);
+            // No report for this month yet — start fresh
+            const fresh = JSON.parse(JSON.stringify(DEFAULT_STATE));
+            fresh._month = monthKey;
+            fresh._owner = email;
             applyRemoteState(fresh);
-            // Save the carried-forward state back to Firestore so other devices
-            // get the same starting roster, and so the carry-forward flag sticks.
-            if (fresh._clientsCarriedForward) queuePush(fresh);
             setStatus('synced'); updatePillUI();
             return;
           }
           const remote = snap.data();
-
-          // ---- Recovery carry-forward: an existing-but-empty month ----
-          // If a month was opened blank BEFORE the carry-forward feature was
-          // wired, OR before the consultant had built up a prior-month roster,
-          // it persists in Firestore as { clients: [] } — OR with placeholder
-          // clients that haven't been populated. When we see such a month,
-          // AND a prior month has clients, AND we haven't already carried
-          // forward into this month (flag), auto-fill the roster.
-          //
-          // "Effectively empty" means: no clients at all, OR every client
-          // looks like an untouched default placeholder. A placeholder has:
-          //   - blank/missing name, OR the literal default name "New Client"
-          //   - no contact, tel, head count, frequency, or type
-          // As soon as the consultant has typed in real data, we leave it alone.
-          const PLACEHOLDER_NAMES = new Set(['', 'new client', 'untitled', 'untitled client']);
-          const isPlaceholderClient = (c) => {
-            if (!c || typeof c !== 'object') return true;
-            const name = String(c.name || '').trim().toLowerCase();
-            if (!PLACEHOLDER_NAMES.has(name)) return false;
-            // Name matches placeholder — but also require that all other
-            // identity fields are empty, so we don't wipe a consultant who
-            // happened to have a client literally called "New Client".
-            const hasIdentity = (
-              String(c.contact   || '').trim() ||
-              String(c.tel       || '').trim() ||
-              String(c.headCount || '').trim() ||
-              String(c.frequency || '').trim() ||
-              String(c.type      || '').trim()
-            );
-            return !hasIdentity;
-          };
-          const clientList = Array.isArray(remote.clients) ? remote.clients : [];
-          const allPlaceholders = clientList.every(isPlaceholderClient);
-          const effectivelyEmpty = clientList.length === 0 || allPlaceholders;
-          const notYetCarriedForward = !remote._clientsCarriedForward;
-          if (effectivelyEmpty && notYetCarriedForward) {
-            const filled = await buildFreshMonthFromRoster(email, monthKey);
-            if (filled.clients && filled.clients.length > 0) {
-              // Preserve any non-client edits the consultant already made
-              // to this month (cover/stats, trips, ccma, bargaining, etc.).
-              const merged = Object.assign({}, remote, {
-                clients: filled.clients,
-                _clientsCarriedForward: true,
-              });
-              applyRemoteState(merged);
-              queuePush(merged);
-              setStatus('synced'); updatePillUI();
-              return;
-            }
-          }
 
           // ---- Echo-suppression: did THIS device produce this snapshot? ----
           // 1. If the snapshot's _sessionId matches our session, it's our echo.
@@ -2756,10 +2841,6 @@
     function userIsTyping() {
       const el = document.activeElement;
       if (!el) return false;
-      // Ignore the month picker — focusing it is part of switching months,
-      // not active typing. Without this exception, switching months would
-      // defer the render and leave the page blank until the user clicks away.
-      if (el.id === 'monthPicker' || el.id === 'itMonthPicker' || el.id === 'adminMonthPicker') return false;
       const tag = el.tagName;
       const editable = el.isContentEditable;
       return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || editable;
@@ -2784,22 +2865,6 @@
       for (const k of Object.keys(state)) delete state[k];
       Object.assign(state, fresh);
       try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch (e) {}
-
-      // Make sure the current view is valid for the data we just loaded.
-      // If the user was viewing a client that doesn't exist in this month,
-      // or any view that depends on state that may not match, fall back to
-      // the Cover & Stats view rather than rendering broken content.
-      if (currentView && currentView.type === 'client') {
-        const idx = currentView.clientIdx;
-        if (!Array.isArray(state.clients) || idx == null || !state.clients[idx]) {
-          currentView = { type: 'meta', clientIdx: 0 };
-        }
-      } else if (currentView && currentView.type === 'venue') {
-        // Venue views are always valid since venue definitions are app-level
-      } else if (!currentView || !currentView.type) {
-        currentView = { type: 'meta', clientIdx: 0 };
-      }
-
       try { renderSidebar(); renderContent(); } catch (e) { console.warn('Render after pull failed:', e); }
     }
 
@@ -2887,11 +2952,9 @@
     // ----- Month switcher (consultant view) -----
     async function switchMonth(newMonthKey) {
       if (!newMonthKey) return;
-      // Just call loadMonth. The Firestore snapshot will fire and trigger
-      // a render via applyRemoteState once the new month's data arrives.
-      // We do NOT render here synchronously — at this moment `state` still
-      // holds the old month's data, so any render would just paint it again.
       await loadMonth(newMonthKey, viewingEmail);
+      renderSidebar();
+      renderContent();
     }
 
     async function listMyMonths() {
@@ -2938,6 +3001,13 @@
     function showSignInError(msg) {
       const el = document.getElementById('signInError');
       if (el) { el.textContent = msg; el.classList.remove('hidden'); }
+      // Any error at all: surface the no-pop-up escape hatch.
+      const alt = document.getElementById('signInRedirectBtn');
+      if (alt) alt.classList.remove('hidden');
+    }
+    function hideSignInError() {
+      const el = document.getElementById('signInError');
+      if (el) { el.textContent = ''; el.classList.add('hidden'); }
     }
     function hideSignInScreen() {
       const root = document.getElementById('signInScreen');
@@ -2979,7 +3049,7 @@
     function getViewingEmail()   { return viewingEmail; }
 
     return {
-      init, signIn, signOut, queuePush, switchMonth, listMyMonths,
+      init, signIn, signInViaRedirect, signOut, queuePush, switchMonth, listMyMonths,
       listAllUsers, listConsultantMonths, loadConsultantMonth,
       viewConsultant, backToDashboard,
       getCurrentUser, getIsAdmin, getCurrentMonth, getViewingEmail,
@@ -3183,33 +3253,21 @@
   }
 
   // ----- Confirm modal -----
-  function confirmDialog(title, msg, opts) {
-    opts = opts || {};
+  function confirmDialog(title, msg) {
     return new Promise(resolve => {
       const bg = document.getElementById('modalBg');
       document.getElementById('modalTitle').textContent = title;
       document.getElementById('modalMsg').textContent = msg;
-      // Restore default visibility of cancel before each call
-      const cancelBtn = document.getElementById('modalCancel');
-      const okBtn = document.getElementById('modalOk');
-      if (opts.okOnly) {
-        cancelBtn.style.display = 'none';
-        okBtn.textContent = 'OK';
-      } else {
-        cancelBtn.style.display = '';
-        okBtn.textContent = 'OK';
-      }
       bg.classList.remove('hidden');
       const ok = () => { cleanup(); resolve(true); };
       const cancel = () => { cleanup(); resolve(false); };
       const cleanup = () => {
         bg.classList.add('hidden');
-        okBtn.removeEventListener('click', ok);
-        cancelBtn.removeEventListener('click', cancel);
-        cancelBtn.style.display = ''; // restore for next caller
+        document.getElementById('modalOk').removeEventListener('click', ok);
+        document.getElementById('modalCancel').removeEventListener('click', cancel);
       };
-      okBtn.addEventListener('click', ok);
-      cancelBtn.addEventListener('click', cancel);
+      document.getElementById('modalOk').addEventListener('click', ok);
+      document.getElementById('modalCancel').addEventListener('click', cancel);
     });
   }
 
@@ -3407,150 +3465,6 @@
   // Cross-team summary + drill-down into individual consultants.
   // Called when an admin signs in (and via "Back to dashboard" button).
   let adminDashboardMonth = null;
-
-  // Proactively repair every consultant's stuck months. A "stuck" month is one
-  // that's stored in Firestore but contains only placeholder clients AND has
-  // no _clientsCarriedForward flag AND has a prior month with real clients.
-  // Uses the same is-placeholder logic as the on-the-fly recovery.
-  async function repairAllMonths() {
-    const btn = document.getElementById('repairMonthsBtn');
-    const ok = await confirmDialog(
-      'Repair all months?',
-      "This scans every consultant's reports for months that opened blank and never carried clients forward from the previous month. For each one, it fills in the prior month's client roster (visits and notes stay blank).\n\nIt's safe: it only touches months where clients are still placeholders. It never overwrites real data.\n\nProceed?"
-    );
-    if (!ok) return;
-
-    btn.disabled = true;
-    btn.textContent = 'Scanning…';
-
-    const libs = CloudSync._libs && CloudSync._libs();
-    const db = CloudSync._db && CloudSync._db();
-    if (!libs || !db) {
-      btn.disabled = false;
-      btn.textContent = 'Repair all months';
-      toast('Not connected — cannot run repair.', true);
-      return;
-    }
-
-    // Same placeholder logic as in the on-the-fly recovery, kept in sync.
-    const PLACEHOLDER_NAMES = new Set(['', 'new client', 'untitled', 'untitled client']);
-    const isPlaceholderClient = (c) => {
-      if (!c || typeof c !== 'object') return true;
-      const name = String(c.name || '').trim().toLowerCase();
-      if (!PLACEHOLDER_NAMES.has(name)) return false;
-      const hasIdentity = (
-        String(c.contact   || '').trim() ||
-        String(c.tel       || '').trim() ||
-        String(c.headCount || '').trim() ||
-        String(c.frequency || '').trim() ||
-        String(c.type      || '').trim()
-      );
-      return !hasIdentity;
-    };
-
-    const stats = { consultantsScanned: 0, monthsScanned: 0, monthsRepaired: 0, errors: [] };
-
-    try {
-      // List every consultant
-      const users = await CloudSync.listAllUsers();
-      for (const user of users) {
-        stats.consultantsScanned++;
-        btn.textContent = `Scanning ${user.displayName || user.email}…`;
-
-        let monthKeys;
-        try {
-          monthKeys = await CloudSync.listConsultantMonths(user.email);
-        } catch (e) {
-          stats.errors.push(`${user.email}: could not list months (${e.message || e})`);
-          continue;
-        }
-        if (!monthKeys || monthKeys.length === 0) continue;
-        monthKeys.sort(); // ascending — earliest first
-
-        // For each month, load it and assess whether it qualifies for repair
-        for (let i = 0; i < monthKeys.length; i++) {
-          const monthKey = monthKeys[i];
-          stats.monthsScanned++;
-          try {
-            const remote = await CloudSync.loadConsultantMonth(user.email, monthKey);
-            if (!remote) continue;
-
-            if (remote._clientsCarriedForward) continue;
-            const clientList = Array.isArray(remote.clients) ? remote.clients : [];
-            const allPlaceholders = clientList.every(isPlaceholderClient);
-            const effectivelyEmpty = clientList.length === 0 || allPlaceholders;
-            if (!effectivelyEmpty) continue;
-
-            // Find the most recent prior month for this consultant that has
-            // real (non-placeholder) clients. We walk backwards through monthKeys
-            // looking at months earlier than this one.
-            let priorRoster = null;
-            for (let j = i - 1; j >= 0; j--) {
-              const priorKey = monthKeys[j];
-              const prior = await CloudSync.loadConsultantMonth(user.email, priorKey);
-              if (!prior || !Array.isArray(prior.clients)) continue;
-              const real = prior.clients.filter(c => !isPlaceholderClient(c));
-              if (real.length > 0) {
-                priorRoster = real;
-                break;
-              }
-            }
-            if (!priorRoster) continue; // no usable prior month — skip
-
-            // Build the carry-forward roster (identity fields only, notes/visits blank)
-            const noteDefault = ['Not at this time.'];
-            const carried = priorRoster.map(c => ({
-              name:      c.name      || '',
-              contact:   c.contact   || '',
-              tel:       c.tel       || '',
-              headCount: c.headCount || '',
-              frequency: c.frequency || '',
-              type:      c.type      || '',
-              visits: [],
-              discipline: noteDefault.slice(),
-              followup:   noteDefault.slice(),
-              admin:      noteDefault.slice(),
-              additional: noteDefault.slice(),
-            }));
-
-            // Merge: keep all of remote's existing fields (cover/stats/trips/
-            // ccma/bargaining), replace clients, mark as carried-forward.
-            const merged = Object.assign({}, remote, {
-              clients: carried,
-              _clientsCarriedForward: true,
-              _updatedAt: Date.now(),
-              _updatedBy: (CloudSync.getCurrentUser() || {}).email || 'admin',
-              _updatedAtServer: libs.serverTimestamp(),
-            });
-
-            const ref = libs.doc(db, 'users', user.email, 'reports', monthKey);
-            await libs.setDoc(ref, merged, { merge: false });
-            stats.monthsRepaired++;
-          } catch (e) {
-            stats.errors.push(`${user.email}/${monthKey}: ${e.message || e}`);
-          }
-        }
-      }
-
-      // Final summary
-      const summary =
-        `Scanned ${stats.consultantsScanned} consultant${stats.consultantsScanned === 1 ? '' : 's'}, ` +
-        `${stats.monthsScanned} month${stats.monthsScanned === 1 ? '' : 's'}.\n\n` +
-        `Repaired: ${stats.monthsRepaired} month${stats.monthsRepaired === 1 ? '' : 's'}.\n` +
-        (stats.errors.length
-          ? `\nErrors (${stats.errors.length}):\n  • ${stats.errors.slice(0, 8).join('\n  • ')}${stats.errors.length > 8 ? `\n  …and ${stats.errors.length - 8} more` : ''}`
-          : '\nNo errors.');
-      await confirmDialog('Repair complete', summary, { okOnly: true });
-      toast(`Repaired ${stats.monthsRepaired} month${stats.monthsRepaired === 1 ? '' : 's'}.`);
-    } catch (e) {
-      console.warn('Repair failed:', e);
-      toast('Repair failed: ' + (e.message || e), true);
-    } finally {
-      btn.disabled = false;
-      btn.textContent = 'Repair all months';
-    }
-  }
-
   async function renderAdminDashboard() {
     const c = document.getElementById('content');
     const title = document.getElementById('viewTitle');
@@ -3578,14 +3492,6 @@
             <div class="it-report-banner-sub">Maintain and generate your monthly IT department report. Stored by month in history.</div>
           </div>
           <button class="btn-primary" id="openItReportBtn">Open IT Report →</button>
-        </div>
-
-        <div class="admin-maintenance">
-          <div class="admin-maintenance-text">
-            <strong>Repair stuck months</strong>
-            <span>Scans every consultant for months that opened blank and never picked up the previous month's client roster. Fills them in. Safe to run any time — only touches months that match the conditions; never overwrites real data.</span>
-          </div>
-          <button class="btn-secondary btn-sm" id="repairMonthsBtn">Repair all months</button>
         </div>
 
         <div class="admin-month-bar">
@@ -3628,8 +3534,6 @@
     document.getElementById('openItReportBtn').addEventListener('click', () => {
       ITReport.open();
     });
-
-    document.getElementById('repairMonthsBtn').addEventListener('click', repairAllMonths);
 
     // Build month picker options (current month back through last 24 months — enough for typical history)
     const picker = document.getElementById('adminMonthPicker');
@@ -4248,7 +4152,7 @@
           <textarea data-client-list="admin" rows="2">${escapeHtml(arrayToLines(cli.admin))}</textarea>
         </div>
         <div class="field">
-          <label>General Overview</label>
+          <label>Additional info</label>
           <textarea data-client-list="additional" rows="2">${escapeHtml(arrayToLines(cli.additional))}</textarea>
         </div>
       </div>
@@ -4325,10 +4229,7 @@
     });
 
     document.getElementById('deleteClientBtn').addEventListener('click', async () => {
-      const ok = await confirmDialog(
-        'Delete client?',
-        `"${cli.name}" will be removed from this month's report and will no longer appear in future months. Past months keep their record of this client unchanged. Continue?`
-      );
+      const ok = await confirmDialog('Delete client?', `"${cli.name}" will be removed from the report. This cannot be undone (use Export JSON first if you want a backup).`);
       if (!ok) return;
       state.clients.splice(currentView.clientIdx, 1);
       currentView = { type: 'meta' };
@@ -4439,117 +4340,6 @@
     return 'trip_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 7);
   }
 
-  // ------------------------------------------------------------
-  // Travel between consecutive client visits
-  // ------------------------------------------------------------
-  // Given an array of trip-like entries (Trip Log, CCMA, or BC),
-  // computes the travel leg from the PREVIOUS visit to each entry
-  // when both are on the same date.
-  //
-  // Returns a Map keyed by the entry's ORIGINAL index in the input
-  // array, with values { km, mins } (either may be null if missing).
-  // Entries without a valid previous-same-date neighbour, or with
-  // insanity-check failures (negative, >12h, >500km), are omitted.
-  //
-  // We sort within each date by "Arrived at Client" time so the
-  // calculation is correct even when rows were entered out of order.
-  // ------------------------------------------------------------
-  function computeTravelLegs(entries) {
-    const result = new Map();
-    if (!Array.isArray(entries) || entries.length < 2) return result;
-
-    const parseTime = (s) => {
-      if (!s) return null;
-      const m = String(s).trim().match(/^(\d{1,2}):?(\d{2})?$/);
-      if (!m) return null;
-      const h = parseInt(m[1], 10);
-      const mn = parseInt(m[2] || '0', 10);
-      if (h < 0 || h > 23 || mn < 0 || mn > 59) return null;
-      return h * 60 + mn;
-    };
-
-    // Group by date, preserving original indices
-    const byDate = new Map();
-    entries.forEach((entry, idx) => {
-      const d = (entry.date || '').trim();
-      if (!d) return;
-      if (!byDate.has(d)) byDate.set(d, []);
-      byDate.get(d).push({ entry, idx });
-    });
-
-    for (const dateGroup of byDate.values()) {
-      if (dateGroup.length < 2) continue;
-      // Sort the group by Arrived time (timeOut field) ascending. Entries
-      // with no time go to the end so they don't break chronological calc.
-      dateGroup.sort((a, b) => {
-        const ta = parseTime(a.entry.timeOut);
-        const tb = parseTime(b.entry.timeOut);
-        if (ta === null && tb === null) return 0;
-        if (ta === null) return 1;
-        if (tb === null) return -1;
-        return ta - tb;
-      });
-
-      // Walk pairs: for each entry from index 1 onwards, compute leg from previous.
-      for (let i = 1; i < dateGroup.length; i++) {
-        const prev = dateGroup[i - 1].entry;
-        const curr = dateGroup[i].entry;
-        const currIdx = dateGroup[i].idx;
-
-        // Travel TIME: this entry's Arrived minus previous entry's Left
-        let travelMins = null;
-        const prevLeft = parseTime(prev.timeBack);
-        const currArrived = parseTime(curr.timeOut);
-        if (prevLeft !== null && currArrived !== null) {
-          let diff = currArrived - prevLeft;
-          if (diff < 0) diff += 24 * 60; // crossed midnight
-          // Sanity check: ignore implausible durations (>12h)
-          if (diff >= 0 && diff <= 12 * 60) travelMins = diff;
-        }
-
-        // Travel KM: this entry's Odo Start minus previous entry's Odo End
-        let travelKm = null;
-        const prevEnd = parseFloat(prev.odoEnd);
-        const currStart = parseFloat(curr.odoStart);
-        if (!isNaN(prevEnd) && !isNaN(currStart)) {
-          const diff = currStart - prevEnd;
-          // Sanity check: must be non-negative and < 500 km
-          if (diff >= 0 && diff <= 500) travelKm = diff;
-        }
-
-        // Suppress meaningless legs:
-        //   - both km and mins are 0 → no actual travel happened (e.g. two
-        //     attendances at the same venue back-to-back)
-        //   - km is 0 and mins is null → just data-entry noise
-        //   - mins is 0 and km is null → also data-entry noise
-        const kmZero   = travelKm   === 0;
-        const minsZero = travelMins === 0;
-        if ((kmZero && minsZero) ||
-            (kmZero   && travelMins === null) ||
-            (minsZero && travelKm   === null)) {
-          continue;
-        }
-
-        if (travelMins !== null || travelKm !== null) {
-          result.set(currIdx, { km: travelKm, mins: travelMins });
-        }
-      }
-    }
-
-    return result;
-  }
-
-  // Render-helper: format a travel leg as a small inline string,
-  // e.g. "↷ 18 km · 35 min from previous client".
-  // Returns '' if both fields are null.
-  function fmtTravelLeg(leg, labelPrevious) {
-    if (!leg || (leg.km === null && leg.mins === null)) return '';
-    const parts = [];
-    if (leg.km !== null) parts.push(leg.km.toLocaleString('en-ZA', { maximumFractionDigits: 1 }) + ' km');
-    if (leg.mins !== null) parts.push(fmtDuration(leg.mins));
-    return '↷ ' + parts.join(' · ') + ' from ' + (labelPrevious || 'previous');
-  }
-
   function renderTripsView() {
     const trips = state.trips || [];
     const filter = state.tripFilter || { client: '', from: '', to: '' };
@@ -4625,7 +4415,6 @@
             <div>Client / Destination</div>
             <div>Arrived at Client</div>
             <div>Left the Client</div>
-            <div>Time at Client</div>
             <div>Odo Start</div>
             <div>Odo End</div>
             <div>KM</div>
@@ -4633,43 +4422,31 @@
             <div></div>
           </div>
           <div id="tripsList">
-            ${(() => {
-              // Compute travel legs between consecutive same-date trips,
-              // using the filtered list (so the legs match what's visible).
-              const legs = computeTravelLegs(filtered);
-              return filtered.map((t, fIdx) => {
-                // Find the actual index in the unfiltered list
-                const realIdx = trips.indexOf(t);
-                const derived = t.odoStart && t.odoEnd && parseFloat(t.odoEnd) >= parseFloat(t.odoStart);
-                const kmVal = derived ? (parseFloat(t.odoEnd) - parseFloat(t.odoStart)) : (t.km || '');
-                const leg = legs.get(fIdx);
-                const prevClient = fIdx > 0 ? (filtered[fIdx - 1].client || 'previous client') : '';
-                const legHtml = leg
-                  ? `<div class="travel-leg">${escapeHtml(fmtTravelLeg(leg, prevClient))}</div>`
-                  : '';
-                return `
-                  ${legHtml}
-                  <div class="trip-row" data-trip-idx="${realIdx}">
-                    <input type="text" data-trip-field="date" placeholder="6 Mar" value="${escapeHtml(t.date)}" />
-                    <input type="text" data-trip-field="client" placeholder="Client / destination"
-                      list="clientNamesList" value="${escapeHtml(t.client)}" />
-                    <input type="text" data-trip-field="timeOut" placeholder="08:30" value="${escapeHtml(t.timeOut)}" />
-                    <input type="text" data-trip-field="timeBack" placeholder="13:15" value="${escapeHtml(t.timeBack)}" />
-                    <div class="time-at-client ${tripDuration(t) === null ? 'empty' : ''}" title="Time spent at this client (Left − Arrived)">${tripDuration(t) === null ? '—' : escapeHtml(fmtDuration(tripDuration(t)))}</div>
-                    <input type="text" data-trip-field="odoStart" placeholder="" value="${escapeHtml(t.odoStart)}" inputmode="decimal" />
-                    <input type="text" data-trip-field="odoEnd" placeholder="" value="${escapeHtml(t.odoEnd)}" inputmode="decimal" />
-                    <input type="text" data-trip-field="km" class="${derived ? 'km-derived' : ''}"
-                      placeholder="0" value="${escapeHtml(String(kmVal))}" inputmode="decimal"
-                      ${derived ? 'readonly title="Derived from odometer readings"' : ''} />
-                    <input type="text" data-trip-field="notes" placeholder="Optional" value="${escapeHtml(t.notes)}" />
-                    <div class="row-actions">
-                      <button data-trip-action="duplicate" title="Duplicate">⊕</button>
-                      <button data-trip-action="remove" class="remove" title="Remove">✕</button>
-                    </div>
+            ${filtered.map((t) => {
+              // Find the actual index in the unfiltered list
+              const realIdx = trips.indexOf(t);
+              const derived = t.odoStart && t.odoEnd && parseFloat(t.odoEnd) >= parseFloat(t.odoStart);
+              const kmVal = derived ? (parseFloat(t.odoEnd) - parseFloat(t.odoStart)) : (t.km || '');
+              return `
+                <div class="trip-row" data-trip-idx="${realIdx}">
+                  <input type="text" data-trip-field="date" placeholder="6 Mar" value="${escapeHtml(t.date)}" />
+                  <input type="text" data-trip-field="client" placeholder="Client / destination"
+                    list="clientNamesList" value="${escapeHtml(t.client)}" />
+                  <input type="text" data-trip-field="timeOut" placeholder="08:30" value="${escapeHtml(t.timeOut)}" />
+                  <input type="text" data-trip-field="timeBack" placeholder="13:15" value="${escapeHtml(t.timeBack)}" />
+                  <input type="text" data-trip-field="odoStart" placeholder="" value="${escapeHtml(t.odoStart)}" inputmode="decimal" />
+                  <input type="text" data-trip-field="odoEnd" placeholder="" value="${escapeHtml(t.odoEnd)}" inputmode="decimal" />
+                  <input type="text" data-trip-field="km" class="${derived ? 'km-derived' : ''}"
+                    placeholder="0" value="${escapeHtml(String(kmVal))}" inputmode="decimal"
+                    ${derived ? 'readonly title="Derived from odometer readings"' : ''} />
+                  <input type="text" data-trip-field="notes" placeholder="Optional" value="${escapeHtml(t.notes)}" />
+                  <div class="row-actions">
+                    <button data-trip-action="duplicate" title="Duplicate">⊕</button>
+                    <button data-trip-action="remove" class="remove" title="Remove">✕</button>
                   </div>
-                `;
-              }).join('');
-            })()}
+                </div>
+              `;
+            }).join('')}
           </div>
           <datalist id="clientNamesList">
             ${clientOptions.map(c => `<option value="${escapeHtml(c)}"></option>`).join('')}
@@ -4712,15 +4489,6 @@
               kmInput.classList.remove('km-derived');
               kmInput.removeAttribute('readonly');
               kmInput.title = '';
-            }
-          }
-          // If Arrived or Left changed, recompute "Time at Client" display
-          if (field === 'timeOut' || field === 'timeBack') {
-            const cell = row.querySelector('.time-at-client');
-            if (cell) {
-              const d = tripDuration(trip);
-              cell.textContent = d === null ? '—' : fmtDuration(d);
-              cell.classList.toggle('empty', d === null);
             }
           }
           save();
@@ -4868,7 +4636,6 @@
             <div>Client Represented</div>
             <div>Arrived at Client</div>
             <div>Left the Client</div>
-            <div>Time at Client</div>
             <div>Odo Start</div>
             <div>Odo End</div>
             <div>KM</div>
@@ -4876,39 +4643,29 @@
             <div></div>
           </div>
           <div id="venueEntriesList">
-            ${(() => {
-              const legs = computeTravelLegs(entries);
-              return entries.map((e, idx) => {
-                const derived = e.odoStart && e.odoEnd && parseFloat(e.odoEnd) >= parseFloat(e.odoStart);
-                const kmVal = derived ? (parseFloat(e.odoEnd) - parseFloat(e.odoStart)) : (e.km || '');
-                const leg = legs.get(idx);
-                const prevClient = idx > 0 ? (entries[idx - 1].client || 'previous client') : '';
-                const legHtml = leg
-                  ? `<div class="travel-leg">${escapeHtml(fmtTravelLeg(leg, prevClient))}</div>`
-                  : '';
-                return `
-                  ${legHtml}
-                  <div class="trip-row" data-venue-entry-idx="${idx}">
-                    <input type="text" data-vfield="date" placeholder="6 Mar" value="${escapeHtml(e.date)}" />
-                    <input type="text" data-vfield="client" placeholder="Which client?"
-                      list="venueClientList" value="${escapeHtml(e.client)}" />
-                    <input type="text" data-vfield="timeOut" placeholder="08:30" value="${escapeHtml(e.timeOut)}" />
-                    <input type="text" data-vfield="timeBack" placeholder="13:15" value="${escapeHtml(e.timeBack)}" />
-                    <div class="time-at-client ${tripDuration(e) === null ? 'empty' : ''}" title="Time spent at this client (Left − Arrived)">${tripDuration(e) === null ? '—' : escapeHtml(fmtDuration(tripDuration(e)))}</div>
-                    <input type="text" data-vfield="odoStart" value="${escapeHtml(e.odoStart)}" inputmode="decimal" />
-                    <input type="text" data-vfield="odoEnd" value="${escapeHtml(e.odoEnd)}" inputmode="decimal" />
-                    <input type="text" data-vfield="km" class="${derived ? 'km-derived' : ''}"
-                      value="${escapeHtml(String(kmVal))}" inputmode="decimal"
-                      ${derived ? 'readonly title="Derived from odometer readings"' : ''} />
-                    <input type="text" data-vfield="notes" placeholder="Matter, employee, outcome…" value="${escapeHtml(e.notes)}" />
-                    <div class="row-actions">
-                      <button data-vaction="duplicate" title="Duplicate">⊕</button>
-                      <button data-vaction="remove" class="remove" title="Remove">✕</button>
-                    </div>
+            ${entries.map((e, idx) => {
+              const derived = e.odoStart && e.odoEnd && parseFloat(e.odoEnd) >= parseFloat(e.odoStart);
+              const kmVal = derived ? (parseFloat(e.odoEnd) - parseFloat(e.odoStart)) : (e.km || '');
+              return `
+                <div class="trip-row" data-venue-entry-idx="${idx}">
+                  <input type="text" data-vfield="date" placeholder="6 Mar" value="${escapeHtml(e.date)}" />
+                  <input type="text" data-vfield="client" placeholder="Which client?"
+                    list="venueClientList" value="${escapeHtml(e.client)}" />
+                  <input type="text" data-vfield="timeOut" placeholder="08:30" value="${escapeHtml(e.timeOut)}" />
+                  <input type="text" data-vfield="timeBack" placeholder="13:15" value="${escapeHtml(e.timeBack)}" />
+                  <input type="text" data-vfield="odoStart" value="${escapeHtml(e.odoStart)}" inputmode="decimal" />
+                  <input type="text" data-vfield="odoEnd" value="${escapeHtml(e.odoEnd)}" inputmode="decimal" />
+                  <input type="text" data-vfield="km" class="${derived ? 'km-derived' : ''}"
+                    value="${escapeHtml(String(kmVal))}" inputmode="decimal"
+                    ${derived ? 'readonly title="Derived from odometer readings"' : ''} />
+                  <input type="text" data-vfield="notes" placeholder="Matter, employee, outcome…" value="${escapeHtml(e.notes)}" />
+                  <div class="row-actions">
+                    <button data-vaction="duplicate" title="Duplicate">⊕</button>
+                    <button data-vaction="remove" class="remove" title="Remove">✕</button>
                   </div>
-                `;
-              }).join('');
-            })()}
+                </div>
+              `;
+            }).join('')}
           </div>
           <datalist id="venueClientList">
             ${clientOptions.map(c => `<option value="${escapeHtml(c)}"></option>`).join('')}
@@ -4950,15 +4707,6 @@
               kmInput.classList.remove('km-derived');
               kmInput.removeAttribute('readonly');
               kmInput.title = '';
-            }
-          }
-          // If Arrived or Left changed, recompute "Time at Client" display
-          if (field === 'timeOut' || field === 'timeBack') {
-            const cell = row.querySelector('.time-at-client');
-            if (cell) {
-              const d = tripDuration(entry);
-              cell.textContent = d === null ? '—' : fmtDuration(d);
-              cell.classList.toggle('empty', d === null);
             }
           }
           save();
@@ -5420,7 +5168,7 @@
         { label: "Discipline taken", lines: cli.discipline },
         { label: "Follow-up re discipline", lines: cli.followup },
         { label: "Administration / Payroll", lines: cli.admin },
-        { label: "General Overview", lines: cli.additional },
+        { label: "Additional info", lines: cli.additional },
       ].map((r, i) => {
         const fill = i % 2 ? ROW_ALT : undefined;
         const lines = (r.lines && r.lines.length) ? r.lines : ['—'];
@@ -5518,53 +5266,6 @@
     const trips = state.trips || [];
     if (trips.length > 0) {
       const totals = tripTotals(trips);
-      const tripLegs = computeTravelLegs(trips);
-
-      // Helper: build a thin travel-leg row spanning the full table width.
-      const tripTravelLegRow = (leg, prevClient) => new TableRow({
-        cantSplit: true,
-        children: [new TableCell({
-          borders: cellBorders,
-          width: { size: 9360, type: WidthType.DXA },
-          columnSpan: 7,
-          shading: { fill: "F4F1EC", type: ShadingType.CLEAR },
-          margins: { top: 40, bottom: 40, left: 220, right: 140 },
-          children: [new Paragraph({
-            children: [new TextRun({
-              text: fmtTravelLeg(leg, prevClient),
-              italics: true,
-              color: SLATE,
-              size: 17,
-              font: "Calibri",
-            })],
-          })],
-        })],
-      });
-
-      const tripDataRows = [];
-      trips.forEach((t, i) => {
-        const leg = tripLegs.get(i);
-        if (leg) {
-          const prevClient = (trips[i - 1] && trips[i - 1].client) || 'previous client';
-          tripDataRows.push(tripTravelLegRow(leg, prevClient));
-        }
-        const fill = i % 2 ? ROW_ALT : undefined;
-        const km = tripKm(t);
-        const dur = tripDuration(t);
-        tripDataRows.push(new TableRow({
-          cantSplit: true,
-          children: [
-            bodyCell(t.date || "—",     1000, { fill, bold: true, color: NAVY, valign: VerticalAlign.TOP }),
-            bodyCell(t.client || "—",   2000, { fill, valign: VerticalAlign.TOP }),
-            bodyCell(t.timeOut || "—",  1180,  { fill, valign: VerticalAlign.TOP, align: AlignmentType.CENTER }),
-            bodyCell(t.timeBack || "—", 1180,  { fill, valign: VerticalAlign.TOP, align: AlignmentType.CENTER }),
-            bodyCell(dur === null ? "—" : fmtDuration(dur), 1080, { fill, valign: VerticalAlign.TOP, align: AlignmentType.CENTER }),
-            bodyCell(km ? km.toLocaleString('en-ZA', { maximumFractionDigits: 1 }) : "—", 880, { fill, valign: VerticalAlign.TOP, align: AlignmentType.RIGHT, bold: true }),
-            bodyCell(t.notes || "",     2040, { fill, valign: VerticalAlign.TOP }),
-          ],
-        }));
-      });
-
       const tripLogTable = new Table({
         width: { size: 9360, type: WidthType.DXA },
         columnWidths: [1000, 2000, 1180, 1180, 1080, 880, 2040],
@@ -5581,7 +5282,23 @@
               headerCell("Notes", 2040),
             ],
           }),
-          ...tripDataRows,
+          ...trips.map((t, i) => {
+            const fill = i % 2 ? ROW_ALT : undefined;
+            const km = tripKm(t);
+            const dur = tripDuration(t);
+            return new TableRow({
+              cantSplit: true,
+              children: [
+                bodyCell(t.date || "—",     1000, { fill, bold: true, color: NAVY, valign: VerticalAlign.TOP }),
+                bodyCell(t.client || "—",   2000, { fill, valign: VerticalAlign.TOP }),
+                bodyCell(t.timeOut || "—",  1180,  { fill, valign: VerticalAlign.TOP, align: AlignmentType.CENTER }),
+                bodyCell(t.timeBack || "—", 1180,  { fill, valign: VerticalAlign.TOP, align: AlignmentType.CENTER }),
+                bodyCell(dur === null ? "—" : fmtDuration(dur), 1080, { fill, valign: VerticalAlign.TOP, align: AlignmentType.CENTER }),
+                bodyCell(km ? km.toLocaleString('en-ZA', { maximumFractionDigits: 1 }) : "—", 880, { fill, valign: VerticalAlign.TOP, align: AlignmentType.RIGHT, bold: true }),
+                bodyCell(t.notes || "",     2040, { fill, valign: VerticalAlign.TOP }),
+              ],
+            });
+          }),
           // Subtotal row
           new TableRow({
             cantSplit: true,
@@ -5616,54 +5333,6 @@
     // ---- CCMA & Bargaining Council attendance tables ----
     function buildJourneyTable(entries, clientHeader) {
       const tot = tripTotals(entries);
-      const legs = computeTravelLegs(entries);
-
-      // Helper: build a thin travel-leg row spanning the full table width.
-      const travelLegRow = (leg, prevClient) => new TableRow({
-        cantSplit: true,
-        children: [new TableCell({
-          borders: cellBorders,
-          width: { size: 9360, type: WidthType.DXA },
-          columnSpan: 7,
-          shading: { fill: "F4F1EC", type: ShadingType.CLEAR },
-          margins: { top: 40, bottom: 40, left: 220, right: 140 },
-          children: [new Paragraph({
-            children: [new TextRun({
-              text: fmtTravelLeg(leg, prevClient),
-              italics: true,
-              color: SLATE,
-              size: 17,
-              font: "Calibri",
-            })],
-          })],
-        })],
-      });
-
-      // Build entry rows, interleaving travel-leg rows where applicable.
-      const dataRows = [];
-      entries.forEach((t, i) => {
-        const leg = legs.get(i);
-        if (leg) {
-          const prevClient = (entries[i - 1] && entries[i - 1].client) || 'previous client';
-          dataRows.push(travelLegRow(leg, prevClient));
-        }
-        const fill = i % 2 ? ROW_ALT : undefined;
-        const km = tripKm(t);
-        const dur = tripDuration(t);
-        dataRows.push(new TableRow({
-          cantSplit: true,
-          children: [
-            bodyCell(t.date || "—",     1000, { fill, bold: true, color: NAVY, valign: VerticalAlign.TOP }),
-            bodyCell(t.client || "—",   2000, { fill, valign: VerticalAlign.TOP }),
-            bodyCell(t.timeOut || "—",  1180,  { fill, valign: VerticalAlign.TOP, align: AlignmentType.CENTER }),
-            bodyCell(t.timeBack || "—", 1180,  { fill, valign: VerticalAlign.TOP, align: AlignmentType.CENTER }),
-            bodyCell(dur === null ? "—" : fmtDuration(dur), 1080, { fill, valign: VerticalAlign.TOP, align: AlignmentType.CENTER }),
-            bodyCell(km ? km.toLocaleString('en-ZA', { maximumFractionDigits: 1 }) : "—", 880, { fill, valign: VerticalAlign.TOP, align: AlignmentType.RIGHT, bold: true }),
-            bodyCell(t.notes || "",     2040, { fill, valign: VerticalAlign.TOP }),
-          ],
-        }));
-      });
-
       return new Table({
         width: { size: 9360, type: WidthType.DXA },
         columnWidths: [1000, 2000, 1180, 1180, 1080, 880, 2040],
@@ -5680,7 +5349,23 @@
               headerCell("Notes", 2040),
             ],
           }),
-          ...dataRows,
+          ...entries.map((t, i) => {
+            const fill = i % 2 ? ROW_ALT : undefined;
+            const km = tripKm(t);
+            const dur = tripDuration(t);
+            return new TableRow({
+              cantSplit: true,
+              children: [
+                bodyCell(t.date || "—",     1000, { fill, bold: true, color: NAVY, valign: VerticalAlign.TOP }),
+                bodyCell(t.client || "—",   2000, { fill, valign: VerticalAlign.TOP }),
+                bodyCell(t.timeOut || "—",  1180,  { fill, valign: VerticalAlign.TOP, align: AlignmentType.CENTER }),
+                bodyCell(t.timeBack || "—", 1180,  { fill, valign: VerticalAlign.TOP, align: AlignmentType.CENTER }),
+                bodyCell(dur === null ? "—" : fmtDuration(dur), 1080, { fill, valign: VerticalAlign.TOP, align: AlignmentType.CENTER }),
+                bodyCell(km ? km.toLocaleString('en-ZA', { maximumFractionDigits: 1 }) : "—", 880, { fill, valign: VerticalAlign.TOP, align: AlignmentType.RIGHT, bold: true }),
+                bodyCell(t.notes || "",     2040, { fill, valign: VerticalAlign.TOP }),
+              ],
+            });
+          }),
           new TableRow({
             cantSplit: true,
             children: [
@@ -5875,10 +5560,32 @@
     });
   }
 
+  async function clearMonthlyData() {
+    // Save snapshot first as backup
+    await saveSnapshot(state);
+    // Preserve consultant info — these don't change month-to-month
+    const preservedMeta = {
+      consultant: state.meta.consultant || '',
+      region: state.meta.region || '',
+      year: state.meta.year || '',
+    };
+    // Reset to blank template, then restore consultant info
+    state = JSON.parse(JSON.stringify(DEFAULT_STATE));
+    ensureVenueArrays();
+    state.meta.consultant = preservedMeta.consultant;
+    state.meta.region = preservedMeta.region;
+    state.meta.year = preservedMeta.year;
+    currentView = { type: 'meta' };
+    save();
+    renderSidebar();
+    renderContent();
+  }
+
   async function generateReport() {
     const btn = document.getElementById('generateBtn');
     btn.disabled = true;
     btn.textContent = 'Generating…';
+    let succeeded = false;
     try {
       const docx = await loadDocxLib();
       const doc = buildDocx(docx);
@@ -5895,12 +5602,25 @@
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
       toast(`Generated ${filename}`);
+      succeeded = true;
     } catch (e) {
       console.error(e);
       toast('Generation failed: ' + e.message, true);
     } finally {
       btn.disabled = false;
       btn.textContent = 'Generate Word Report';
+    }
+
+    if (succeeded) {
+      // Prompt to clear month-end data
+      const ok = await confirmDialog(
+        'Clear monthly data for next month?',
+        'Now that the report is generated, clear all visits, journey logs (Trip Log, CCMA, Bargaining Council), summaries, head counts and monthly cover stats so you can start fresh next month?\n\nYour client list, contacts, consultant name, region and year are preserved. The current data will be saved as a daily backup before clearing — you can restore it from the Storage panel.'
+      );
+      if (ok) {
+        await clearMonthlyData();
+        toast('Cleared for next month. Previous data saved as backup.');
+      }
     }
   }
 
@@ -6795,6 +6515,27 @@
     });
     document.getElementById('exportJsonBtn').addEventListener('click', exportJson);
     document.getElementById('generateBtn').addEventListener('click', generateReport);
+    document.getElementById('clearMonthBtn').addEventListener('click', async () => {
+      const ok = await confirmDialog(
+        'Clear monthly data?',
+        'Clear all visits, journey logs (Trip Log, CCMA, Bargaining Council), summaries, head counts and monthly cover stats so you can start fresh next month?\n\nYour client list, contacts, consultant name, region and year are preserved. The current data will be saved as a daily backup first.'
+      );
+      if (!ok) return;
+      await clearMonthlyData();
+      toast('Cleared for next month. Previous data saved as backup.');
+    });
+    document.getElementById('resetBtn').addEventListener('click', async () => {
+      const ok = await confirmDialog('Reset to blank template?', 'All your edits will be replaced with the blank starting template (clients only, no data). Your current data will be saved as a daily backup before resetting, so you can restore it if needed.');
+      if (!ok) return;
+      // Save current as snapshot first
+      await saveSnapshot(state);
+      state = JSON.parse(JSON.stringify(DEFAULT_STATE));
+      currentView = { type: 'meta' };
+      save();
+      renderSidebar();
+      renderContent();
+      toast('Reset to defaults');
+    });
     document.getElementById('storageBtn').addEventListener('click', openStorageModal);
     document.getElementById('savePill').addEventListener('click', openStorageModal);
     document.getElementById('storageModalClose').addEventListener('click', closeStorageModal);
