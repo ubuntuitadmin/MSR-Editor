@@ -1713,7 +1713,7 @@
 <!-- Sticky action bar -->
 <div class="action-bar">
   <div class="info" id="actionInfo"></div>
-  <button class="btn-secondary btn-sm" id="clearMonthBtn" title="Clear visits, journeys, summaries, head counts and monthly cover stats — keeps your client list and consultant details">Clear monthly data</button>
+  <button class="btn-secondary btn-sm" id="clearMonthBtn" title="Clear this month's visits, journeys and summaries — keeps your client list and consultant details">Clear monthly data</button>
   <button class="btn-secondary btn-sm" id="resetBtn">Reset to blank template</button>
   <button class="btn-primary" id="generateBtn">Generate Word Report</button>
 </div>
@@ -2706,6 +2706,7 @@
     async function signOut() {
       try {
         if (unsubReport) { unsubReport(); unsubReport = null; }
+        try { await flushPush(); } catch (e) {} // don't lose the last edit
         await firebaseLibs.signOut(auth);
         // Clear local data so the next user doesn't see this user's data
         try { localStorage.removeItem(STORAGE_KEY); } catch (e) {}
@@ -2782,13 +2783,47 @@
 
       // Tear down any previous live subscription
       if (unsubReport) { unsubReport(); unsubReport = null; }
+      // Echo/staleness guard is per-month: a write made to LAST month must
+      // not cause THIS month's (older-stamped) snapshot to be ignored.
+      lastWriteTimestamp = 0;
+      // Flush any edit still waiting in the debounce so it lands in the
+      // month it was made in (fire-and-forget; it carries its own target).
+      if (pendingState) flushPush();
 
       try {
         const ref = firebaseLibs.doc(db, 'users', email, 'reports', monthKey);
+        let rosterSeeded = false; // only attempt carry-forward once per load
+
+        // Seed a new / empty month from the consultant's prior roster, then
+        // push it so every device (and the admin dashboard) sees the same list.
+        const seedMonth = async (existing) => {
+          rosterSeeded = true;
+          setStatus('loading'); updatePillUI();
+          const { state: fresh, carried } = await buildFreshMonth(email, monthKey, existing);
+          // User may have switched months while we were fetching — bail out.
+          if (currentMonth !== monthKey || viewingEmail !== email) return;
+          pendingRemote = null; clearTimeout(applyRemoteTimer); // drop any stale deferred update
+          applyRemoteState(fresh, true);
+          if (carried > 0) {
+            save(); // persists locally + queues the Firestore write
+            toast(`${carried} client${carried === 1 ? '' : 's'} carried over from your previous month`);
+          }
+          setStatus('synced'); updatePillUI();
+        };
+
         // Live subscription — auto-updates when another device saves
         unsubReport = firebaseLibs.onSnapshot(ref, (snap) => {
           if (!snap.exists()) {
-            // No report for this month yet — start fresh
+            if (snap.metadata && snap.metadata.fromCache) {
+              // Offline / cache-only answer: show a blank month for now and
+              // wait for the server to confirm before carrying anything over.
+              const blank = JSON.parse(JSON.stringify(DEFAULT_STATE));
+              blank._month = monthKey; blank._owner = email;
+              applyRemoteState(blank);
+              setStatus('offline'); updatePillUI();
+              return;
+            }
+            if (!rosterSeeded) { seedMonth(null); return; }
             const fresh = JSON.parse(JSON.stringify(DEFAULT_STATE));
             fresh._month = monthKey;
             fresh._owner = email;
@@ -2797,6 +2832,13 @@
             return;
           }
           const remote = snap.data();
+
+          // Month exists but is completely empty (created by an older build
+          // before roster carry-forward existed) — treat it like a new month.
+          if (!rosterSeeded && reportIsEmpty(remote) && !(snap.metadata && snap.metadata.fromCache)) {
+            seedMonth(remote);
+            return;
+          }
 
           // ---- Echo-suppression: did THIS device produce this snapshot? ----
           // 1. If the snapshot's _sessionId matches our session, it's our echo.
@@ -2846,10 +2888,12 @@
       return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || editable;
     }
 
-    function applyRemoteState(remote) {
+    function applyRemoteState(remote, force) {
       // If the user is mid-typing, don't yank the DOM out from under them.
-      // Stash the update and retry in 2 seconds.
-      if (userIsTyping()) {
+      // Stash the update and retry in 2 seconds. (force=true skips this —
+      // used when seeding a freshly opened month, where the "focused"
+      // element is just the month picker and deferring would be wrong.)
+      if (!force && userIsTyping()) {
         pendingRemote = remote;
         clearTimeout(applyRemoteTimer);
         applyRemoteTimer = setTimeout(() => {
@@ -2874,35 +2918,48 @@
     }
 
     // ----- Saving (debounced push) -----
+    let pendingTarget = null; // { email, month } the pending push belongs to
+
     function queuePush(snapshot) {
       if (!currentUser || !viewingEmail) return;
-      pendingState = snapshot;
+      // Snapshot the state NOW (deep copy) and remember which month it is
+      // for, so a month switch during the debounce can never write this
+      // month's data into another month's document.
+      pendingState  = JSON.parse(JSON.stringify(snapshot));
+      pendingTarget = { email: viewingEmail, month: currentMonth };
       clearTimeout(pushTimer);
-      pushTimer = setTimeout(async () => {
-        if (!navigator.onLine) { setStatus('offline'); updatePillUI(); return; }
-        setStatus('syncing'); updatePillUI();
-        const writeTimestamp = Date.now();
-        try {
-          const ref = firebaseLibs.doc(db, 'users', viewingEmail, 'reports', currentMonth);
-          const payload = JSON.parse(JSON.stringify(pendingState));
-          payload._month = currentMonth;
-          payload._owner = viewingEmail;
-          payload._updatedAt = writeTimestamp;
-          payload._updatedBy = currentUser.email;
-          payload._sessionId = SESSION_ID;
-          payload._updatedAtServer = firebaseLibs.serverTimestamp();
-          // Record BEFORE the await so the echo (which can arrive before we
-          // get back here on slow networks) is recognised as ours.
-          lastWriteTimestamp = writeTimestamp;
-          await firebaseLibs.setDoc(ref, payload, { merge: false });
-          setStatus('synced');
-        } catch (e) {
-          console.warn('Save to Firestore failed:', e);
-          setStatus('error');
-        } finally {
-          updatePillUI();
-        }
-      }, 1500);
+      pushTimer = setTimeout(flushPush, 1500);
+    }
+
+    async function flushPush() {
+      clearTimeout(pushTimer); pushTimer = null;
+      if (!pendingState || !pendingTarget || !currentUser) return;
+      const payload = pendingState;
+      const target  = pendingTarget;
+      pendingState = null; pendingTarget = null;
+      if (!navigator.onLine) { setStatus('offline'); updatePillUI(); return; }
+      const isCurrent = (target.email === viewingEmail && target.month === currentMonth);
+      if (isCurrent) { setStatus('syncing'); updatePillUI(); }
+      const writeTimestamp = Date.now();
+      try {
+        const ref = firebaseLibs.doc(db, 'users', target.email, 'reports', target.month);
+        payload._month = target.month;
+        payload._owner = target.email;
+        payload._updatedAt = writeTimestamp;
+        payload._updatedBy = currentUser.email;
+        payload._sessionId = SESSION_ID;
+        payload._updatedAtServer = firebaseLibs.serverTimestamp();
+        // Record BEFORE the await so the echo (which can arrive before we
+        // get back here on slow networks) is recognised as ours.
+        if (isCurrent) lastWriteTimestamp = writeTimestamp;
+        await firebaseLibs.setDoc(ref, payload, { merge: false });
+        if (isCurrent) setStatus('synced');
+      } catch (e) {
+        console.warn('Save to Firestore failed:', e);
+        if (isCurrent) setStatus('error');
+      } finally {
+        if (isCurrent) updatePillUI();
+      }
     }
 
     // ----- Admin: list all consultants + their month status -----
@@ -2924,6 +2981,94 @@
       const months = [];
       snap.forEach(d => months.push(d.id));
       return months.sort().reverse();
+    }
+
+    // ----- Client roster carry-forward ---------------------------------
+    // A consultant's client list is permanent; only the monthly activity
+    // (visits, journeys, summaries) starts fresh each month. When a month
+    // has no report yet (or was opened empty by an older version of the
+    // app), copy the roster from the most recent prior month that has one.
+    const ROSTER_LOOKBACK = 24; // how many prior months to search
+
+    function rosterFromReport(prev) {
+      return (prev.clients || [])
+        .filter(c => c && String(c.name || '').trim())
+        .map(c => ({
+          name:      c.name || '',
+          contact:   c.contact || '',
+          tel:       c.tel || '',
+          headCount: c.headCount || '',
+          frequency: c.frequency || '',
+          type:      c.type || '',
+          visits: [],
+          discipline: ['Not at this time.'],
+          followup:   ['Not at this time.'],
+          admin:      ['Not at this time.'],
+          additional: ['Not at this time.'],
+        }));
+    }
+
+    function reportHasActivity(r) {
+      if (!r) return false;
+      if ((r.clients || []).some(c => (c.visits || []).length)) return true;
+      if ((r.trips || []).length) return true;
+      if ((r.otherClients || []).length) return true;
+      for (const dict of [r.ccma || {}, r.bargaining || {}]) {
+        for (const k of Object.keys(dict)) if ((dict[k] || []).length) return true;
+      }
+      return false;
+    }
+
+    // "Empty" = no clients and nothing logged — safe to seed from a prior month.
+    function reportIsEmpty(r) {
+      return !r || ((r.clients || []).length === 0 && !reportHasActivity(r));
+    }
+
+    async function findLatestPriorReport(email, monthKey) {
+      const months = (await listConsultantMonths(email)).filter(m => m < monthKey).slice(0, ROSTER_LOOKBACK);
+      for (const m of months) {
+        try {
+          const r = await loadConsultantMonth(email, m);
+          if (r && (r.clients || []).length) return r;
+        } catch (e) { /* skip unreadable month */ }
+      }
+      return null;
+    }
+
+    // Fill month/year/period labels from the month key if the consultant
+    // hasn't typed them yet.
+    function fillMonthLabels(s, monthKey) {
+      const [y, mo] = monthKey.split('-');
+      const first = new Date(Number(y), Number(mo) - 1, 1);
+      const lastDay = new Date(Number(y), Number(mo), 0).getDate();
+      const monthName = first.toLocaleDateString('en-ZA', { month: 'long' });
+      if (!s.meta.month)  s.meta.month  = monthName;
+      if (!s.meta.year)   s.meta.year   = y;
+      if (!s.meta.period) s.meta.period = `01 – ${String(lastDay).padStart(2, '0')} ${monthName} ${y}`;
+    }
+
+    // Build the state for a month that has no usable report yet. Returns
+    // { state, carried } where carried = number of clients copied forward.
+    async function buildFreshMonth(email, monthKey, existing) {
+      const fresh = existing ? migrateState(JSON.parse(JSON.stringify(existing)))
+                             : JSON.parse(JSON.stringify(DEFAULT_STATE));
+      fresh._month = monthKey;
+      fresh._owner = email;
+      let carried = 0;
+      try {
+        const prev = await findLatestPriorReport(email, monthKey);
+        if (prev) {
+          fresh.clients = rosterFromReport(prev);
+          carried = fresh.clients.length;
+          // Consultant details don't change month to month either
+          if (prev.meta) {
+            if (!fresh.meta.consultant) fresh.meta.consultant = prev.meta.consultant || '';
+            if (!fresh.meta.region)     fresh.meta.region     = prev.meta.region || '';
+          }
+        }
+      } catch (e) { console.warn('Client roster carry-forward failed:', e); }
+      fillMonthLabels(fresh, monthKey);
+      return { state: fresh, carried };
     }
 
     // Admin: open a specific consultant's specific month for viewing/editing
@@ -3317,7 +3462,9 @@
     picker.innerHTML = all.map(key => {
       const [y, m] = key.split('-');
       const label = new Date(Number(y), Number(m) - 1, 1).toLocaleDateString('en-ZA', { month: 'long', year: 'numeric' });
-      const isStored = fromCloud.includes(key);
+      // The month on screen counts as "has data" as soon as it has clients —
+      // the cloud write may still be a second or two behind.
+      const isStored = fromCloud.includes(key) || (key === current && (state.clients || []).length > 0);
       return `<option value="${key}" ${key === current ? 'selected' : ''}>${label}${isStored ? '' : ' (no data)'}</option>`;
     }).join('');
 
@@ -3691,10 +3838,9 @@
     const m = state.meta;
     return `
       <div class="help-banner">
-        <strong>Welcome.</strong> This is a blank monthly report template ready for you to populate. Start by filling in
-        <strong>Cover &amp; Stats</strong> with the consultant, region and month, then add your clients via the
-        <strong>+ Add Client</strong> button in the sidebar. Your work auto-saves continuously — click the Storage pill at
-        the top right to set up auto-save to a file for safer storage.
+        <strong>Welcome.</strong> Fill in <strong>Cover &amp; Stats</strong> with the consultant, region and month, then add your
+        clients via the <strong>+ Add Client</strong> button in the sidebar. Your client list carries over automatically every
+        month — only visits, journeys and summaries start fresh. Your work auto-saves continuously to the cloud.
       </div>
 
       <div class="card">
@@ -5567,14 +5713,33 @@
     const preservedMeta = {
       consultant: state.meta.consultant || '',
       region: state.meta.region || '',
+      month: state.meta.month || '',
       year: state.meta.year || '',
+      period: state.meta.period || '',
     };
-    // Reset to blank template, then restore consultant info
+    // Preserve the client roster (details only — visits & summaries reset).
+    // The client list is permanent; only monthly activity is cleared.
+    const preservedClients = (state.clients || [])
+      .filter(c => c && String(c.name || '').trim())
+      .map(c => ({
+        name: c.name || '', contact: c.contact || '', tel: c.tel || '',
+        headCount: c.headCount || '', frequency: c.frequency || '', type: c.type || '',
+        visits: [],
+        discipline: ['Not at this time.'],
+        followup:   ['Not at this time.'],
+        admin:      ['Not at this time.'],
+        additional: ['Not at this time.'],
+      }));
+    const preservedIds = {
+      _month: state._month || CloudSync.getCurrentMonth(),
+      _owner: state._owner || CloudSync.getViewingEmail(),
+    };
+    // Reset to blank template, then restore what should survive
     state = JSON.parse(JSON.stringify(DEFAULT_STATE));
     ensureVenueArrays();
-    state.meta.consultant = preservedMeta.consultant;
-    state.meta.region = preservedMeta.region;
-    state.meta.year = preservedMeta.year;
+    Object.assign(state.meta, preservedMeta);
+    state.clients = preservedClients;
+    Object.assign(state, preservedIds);
     currentView = { type: 'meta' };
     save();
     renderSidebar();
@@ -5611,17 +5776,10 @@
       btn.textContent = 'Generate Word Report';
     }
 
-    if (succeeded) {
-      // Prompt to clear month-end data
-      const ok = await confirmDialog(
-        'Clear monthly data for next month?',
-        'Now that the report is generated, clear all visits, journey logs (Trip Log, CCMA, Bargaining Council), summaries, head counts and monthly cover stats so you can start fresh next month?\n\nYour client list, contacts, consultant name, region and year are preserved. The current data will be saved as a daily backup before clearing — you can restore it from the Storage panel.'
-      );
-      if (ok) {
-        await clearMonthlyData();
-        toast('Cleared for next month. Previous data saved as backup.');
-      }
-    }
+    // Note: no "clear for next month" prompt any more. Each month is its own
+    // report in the cloud, so next month opens as a clean slate automatically
+    // — with the client list carried over. Clearing here would wipe this
+    // month's stored history.
   }
 
   // ============================================================
@@ -6517,15 +6675,15 @@
     document.getElementById('generateBtn').addEventListener('click', generateReport);
     document.getElementById('clearMonthBtn').addEventListener('click', async () => {
       const ok = await confirmDialog(
-        'Clear monthly data?',
-        'Clear all visits, journey logs (Trip Log, CCMA, Bargaining Council), summaries, head counts and monthly cover stats so you can start fresh next month?\n\nYour client list, contacts, consultant name, region and year are preserved. The current data will be saved as a daily backup first.'
+        'Clear this month\'s activity?',
+        'Clear all visits, journey logs (Trip Log, CCMA, Bargaining Council) and summaries logged for THIS reporting month?\n\nYour client list (names, contacts, head counts, payroll frequency, type) and your consultant details are kept. A daily backup is saved first.\n\nYou do not need to do this at month-end — the next month opens as a clean slate automatically, with your clients carried over.'
       );
       if (!ok) return;
       await clearMonthlyData();
       toast('Cleared for next month. Previous data saved as backup.');
     });
     document.getElementById('resetBtn').addEventListener('click', async () => {
-      const ok = await confirmDialog('Reset to blank template?', 'All your edits will be replaced with the blank starting template (clients only, no data). Your current data will be saved as a daily backup before resetting, so you can restore it if needed.');
+      const ok = await confirmDialog('Reset to blank template?', 'This wipes EVERYTHING for this month — including your client list. Use "Clear monthly data" instead if you only want to remove this month\'s activity and keep your clients. Your current data will be saved as a daily backup before resetting, so you can restore it if needed.');
       if (!ok) return;
       // Save current as snapshot first
       await saveSnapshot(state);
