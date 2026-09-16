@@ -100,6 +100,11 @@ service cloud.firestore {
 
       match /reports/{month} {
         allow read, write: if isOwner(email) || isAdmin();
+
+        // Daily cloud backups of each month's report (last 30 days)
+        match /snapshots/{day} {
+          allow read, write: if isOwner(email) || isAdmin();
+        }
       }
     }
 

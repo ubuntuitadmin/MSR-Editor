@@ -497,6 +497,8 @@
     max-width: 480px;
     width: 100%;
     box-shadow: var(--shadow-lg);
+    max-height: calc(100vh - 48px);
+    overflow-y: auto;
   }
   .modal h2 {
     font-family: 'Fraunces', serif;
@@ -1868,7 +1870,7 @@
 
     <div class="storage-section">
       <h3>Daily backups</h3>
-      <p class="desc">An automatic snapshot is kept every day for the last 30 days, in case you need to undo a major change. Click to restore.</p>
+      <p class="desc">A snapshot of each day you work on is kept for the last 30 days — in the cloud (per reporting month, on every device) and in this browser — in case you need to undo a major change. Click to restore.</p>
       <div id="snapshotList"></div>
     </div>
 
@@ -2361,23 +2363,38 @@
     } catch (e) { console.warn('File read failed:', e); return null; }
   }
 
-  // Daily snapshots
+  // Daily snapshots (this browser only — see CloudSync for the cloud copies)
   function todayKey() {
-    return new Date().toISOString().slice(0, 10);
+    // Local calendar date, not UTC — an edit at 23:30 in Johannesburg is
+    // still "today", not tomorrow.
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
   }
+  // Which reporting month a snapshot belongs to. Falls back to the calendar
+  // month when the cloud module hasn't loaded a month yet.
+  function snapshotMonthKey(s) {
+    const m = (s && s._month) || (typeof CloudSync !== 'undefined' && CloudSync.getCurrentMonth && CloudSync.getCurrentMonth());
+    return (m && /^\d{4}-\d{2}$/.test(m)) ? m : todayKey().slice(0, 7);
+  }
+  const SNAPSHOT_KEEP = 30;
   async function saveSnapshot(s) {
     try {
-      const key = todayKey();
+      const date = todayKey();
+      const month = snapshotMonthKey(s);
+      // Keyed by date AND reporting month, so editing August and September
+      // on the same day keeps a backup of each rather than one overwriting
+      // the other. (Older plain-date keys from previous builds still load.)
+      const key = `${date}__${month}`;
       await idbSet('snapshots', key, {
-        date: key,
+        date, month,
         timestamp: Date.now(),
         data: JSON.parse(JSON.stringify(s)),
       });
-      // Trim to last 30 keys
+      // Trim to the most recent SNAPSHOT_KEEP keys (keys sort by date first)
       const keys = await idbListKeys('snapshots');
       const sorted = keys.slice().sort();
-      if (sorted.length > 30) {
-        for (const k of sorted.slice(0, sorted.length - 30)) {
+      if (sorted.length > SNAPSHOT_KEEP) {
+        for (const k of sorted.slice(0, sorted.length - SNAPSHOT_KEEP)) {
           await idbDelete('snapshots', k);
         }
       }
@@ -2389,7 +2406,7 @@
       const out = [];
       for (const k of keys) {
         const s = await idbGet('snapshots', k);
-        if (s) out.push(s);
+        if (s) out.push(Object.assign({ key: k, month: (s.data && s.data._month) || '' }, s, { source: 'local' }));
       }
       return out.sort((a, b) => b.timestamp - a.timestamp);
     } catch (e) { return []; }
@@ -2455,8 +2472,9 @@
         savedToFile = await writeToFile(state);
       }
 
-      // 3. Daily snapshot in IDB (don't await on every save - let it happen in bg)
+      // 3. Daily snapshot — this browser (IDB) and the cloud (rate-limited)
       saveSnapshot(state);
+      try { CloudSync.queueSnapshot(state); } catch (e) { /* module not ready */ }
 
       // 4. Google Drive (debounced separately inside the module, fire-and-forget)
       try { CloudSync.queuePush(state); } catch (e) { /* module not ready */ }
@@ -2835,6 +2853,7 @@
       try {
         if (unsubReport) { unsubReport(); unsubReport = null; }
         try { await flushPush(); } catch (e) {} // don't lose the last edit
+        try { if (snapPending) { clearTimeout(snapTimer); snapTimer = null; await flushSnapshot(); } } catch (e) {}
         await firebaseLibs.signOut(auth);
         // Clear local data so the next user doesn't see this user's data
         try { localStorage.removeItem(STORAGE_KEY); } catch (e) {}
@@ -2917,6 +2936,7 @@
       // Flush any edit still waiting in the debounce so it lands in the
       // month it was made in (fire-and-forget; it carries its own target).
       if (pendingState) flushPush();
+      if (snapPending) { clearTimeout(snapTimer); snapTimer = null; flushSnapshot(); }
 
       try {
         const ref = firebaseLibs.doc(db, 'users', email, 'reports', monthKey);
@@ -3089,6 +3109,69 @@
         if (isCurrent) updatePillUI();
       }
     }
+
+    // ----- Cloud daily snapshots ------------------------------------------
+    // One document per calendar day per reporting month, at
+    //   /users/{email}/reports/{month}/snapshots/{YYYY-MM-DD}
+    // so backups follow the consultant to every device (the IndexedDB copy
+    // only exists in the browser that made it). Writes are rate-limited:
+    // the first edit of the day is captured within a few seconds, then at
+    // most one write per SNAPSHOT_MIN_GAP while editing continues.
+    const SNAPSHOT_MIN_GAP = 60 * 1000;
+    let snapTimer = null, snapPending = null, snapTarget = null, lastSnapAt = 0;
+    let cloudSnapshotsBlocked = false; // set when the rules reject the write (not yet published)
+
+    function queueSnapshot(snapshot) {
+      if (!currentUser || !viewingEmail || !firebaseLibs || !db) return;
+      snapPending = JSON.parse(JSON.stringify(snapshot));
+      snapTarget = { email: viewingEmail, month: currentMonth };
+      if (snapTimer) return; // a write is already scheduled — it will pick up the latest state
+      const wait = Math.max(5000, SNAPSHOT_MIN_GAP - (Date.now() - lastSnapAt));
+      snapTimer = setTimeout(flushSnapshot, wait);
+    }
+
+    async function flushSnapshot() {
+      snapTimer = null;
+      if (!snapPending || !snapTarget || !navigator.onLine) return;
+      const payload = snapPending, target = snapTarget;
+      snapPending = null; snapTarget = null;
+      try {
+        const date = todayKey();
+        const ref = firebaseLibs.doc(db, 'users', target.email, 'reports', target.month, 'snapshots', date);
+        await firebaseLibs.setDoc(ref, {
+          date, month: target.month,
+          timestamp: Date.now(),
+          savedBy: currentUser.email,
+          data: payload,
+          _updatedAtServer: firebaseLibs.serverTimestamp(),
+        }, { merge: false });
+        lastSnapAt = Date.now();
+        cloudSnapshotsBlocked = false;
+        trimCloudSnapshots(target.email, target.month).catch(() => {});
+      } catch (e) {
+        console.warn('Cloud snapshot failed:', e);
+        if (e && /permission/i.test(e.code || e.message || '')) cloudSnapshotsBlocked = true;
+      }
+    }
+
+    async function listCloudSnapshots(email, month) {
+      email = email || viewingEmail; month = month || currentMonth;
+      if (!email || !month || !firebaseLibs || !db) return [];
+      const snap = await firebaseLibs.getDocs(firebaseLibs.collection(db, 'users', email, 'reports', month, 'snapshots'));
+      const out = [];
+      snap.forEach(d => { const v = d.data(); out.push({ key: d.id, date: v.date || d.id, month: v.month || month, timestamp: v.timestamp || 0, savedBy: v.savedBy || '', data: v.data, source: 'cloud' }); });
+      return out.sort((a, b) => b.timestamp - a.timestamp);
+    }
+
+    async function trimCloudSnapshots(email, month) {
+      const list = await listCloudSnapshots(email, month);
+      const extra = list.slice(SNAPSHOT_KEEP); // list is newest-first
+      for (const s of extra) {
+        try { await firebaseLibs.deleteDoc(firebaseLibs.doc(db, 'users', email, 'reports', month, 'snapshots', s.key)); } catch (e) {}
+      }
+    }
+
+    function snapshotsBlocked() { return cloudSnapshotsBlocked; }
 
     // ----- Admin: list all consultants + their month status -----
     async function listAllUsers() {
@@ -3323,6 +3406,7 @@
 
     return {
       init, signIn, signInViaRedirect, signOut, queuePush, switchMonth, listMyMonths,
+      queueSnapshot, flushSnapshot, listCloudSnapshots, snapshotsBlocked,
       listAllUsers, listConsultantMonths, loadConsultantMonth,
       viewConsultant, backToDashboard,
       getCurrentUser, getIsAdmin, getCurrentMonth, getViewingEmail,
@@ -3458,49 +3542,79 @@
       document.getElementById('setupFileBtn').addEventListener('click', handlePickFile);
     }
 
-    // Render snapshot list
+    // Render snapshot list — cloud backups (every device) + this browser's
     const list = document.getElementById('snapshotList');
-    const snaps = await listSnapshots();
-    if (snaps.length === 0) {
-      list.innerHTML = `<div class="snapshot-empty">No daily backups yet — they'll appear here as you work.</div>`;
-    } else {
-      list.innerHTML = `<div class="snapshot-list">${snaps.map(s => {
-        const data = s.data || {};
-        const clients = (data.clients || []).length;
-        const visits = (data.clients || []).reduce((a, c) => a + (c.visits || []).length, 0);
-        const trips = (data.trips || []).length;
-        const isToday = s.date === todayKey();
-        return `
-          <div class="snapshot-row">
-            <div class="snap-date">${s.date}${isToday ? ' (today)' : ''}</div>
-            <div class="snap-meta">
-              <strong>${clients}</strong> clients · <strong>${visits}</strong> visits · <strong>${trips}</strong> trips
-              · saved ${fmtTime(new Date(s.timestamp))}
-            </div>
-            <button class="btn-secondary btn-sm" data-restore-date="${s.date}">Restore</button>
+    list.innerHTML = `<div class="snapshot-empty">Loading backups…</div>`;
+    const localSnaps = await listSnapshots();
+    let cloudSnaps = [], cloudErr = null;
+    try { cloudSnaps = await CloudSync.listCloudSnapshots(); } catch (e) { cloudErr = e; }
+    const viewingMonth = CloudSync.getCurrentMonth() || '';
+    const monthName = (k) => {
+      if (!k || !/^\d{4}-\d{2}$/.test(k)) return '';
+      const [y, m] = k.split('-').map(Number);
+      return new Date(y, m - 1, 1).toLocaleDateString('en-ZA', { month: 'short', year: 'numeric' });
+    };
+    const dmy = (iso) => { const [y, m, d] = String(iso).split('-'); return (y && m && d) ? `${d}/${m}/${y}` : iso; };
+    const rowHtml = (s, idx) => {
+      const data = s.data || {};
+      const clients = (data.clients || []).length;
+      const visits = (data.clients || []).reduce((a, c) => a + (c.visits || []).length, 0);
+      const trips = (data.trips || []).length;
+      const isToday = s.date === todayKey();
+      const mon = s.month || (data && data._month) || '';
+      const otherMonth = mon && viewingMonth && mon !== viewingMonth;
+      return `
+        <div class="snapshot-row">
+          <div class="snap-date">${dmy(s.date)}${isToday ? ' (today)' : ''}</div>
+          <div class="snap-meta">
+            ${mon ? `<strong style="${otherMonth ? 'color:var(--accent);' : ''}">${escapeHtml(monthName(mon))} report</strong> · ` : ''}
+            <strong>${clients}</strong> clients · <strong>${visits}</strong> visits · <strong>${trips}</strong> trips
+            · saved ${fmtTime(new Date(s.timestamp))}${s.savedBy && s.savedBy !== (CloudSync.getCurrentUser() || {}).email ? ` by ${escapeHtml(s.savedBy)}` : ''}
           </div>
-        `;
-      }).join('')}</div>`;
-      list.querySelectorAll('[data-restore-date]').forEach(btn => {
-        btn.addEventListener('click', async () => {
-          const date = btn.dataset.restoreDate;
-          const ok = await confirmDialog('Restore backup?', `Replace your current data with the snapshot from ${date}? Your current data will be backed up automatically before restoring.`);
-          if (!ok) return;
-          // Save current as a special snapshot first
-          await saveSnapshot(state);
-          const snap = await idbGet('snapshots', date);
-          if (snap && snap.data) {
-            state = migrateState(JSON.parse(JSON.stringify(snap.data)));
-            currentView = { type: 'meta' };
-            save();
-            renderSidebar();
-            renderContent();
-            closeStorageModal();
-            toast(`Restored backup from ${date}`);
-          }
-        });
+          <button class="btn-secondary btn-sm" data-restore-idx="${idx}">Restore</button>
+        </div>`;
+    };
+    const all = [...cloudSnaps, ...localSnaps];
+    const cloudBlock = cloudErr || CloudSync.snapshotsBlocked()
+      ? `<div class="drive-setup-hint" style="margin-bottom:12px;">Cloud backups aren't available yet — the Firestore security rules need the <code>snapshots</code> rule added (see SETUP-FIREBASE.md). Backups below are from this browser only.</div>`
+      : `<div class="input-help" style="margin:0 0 6px;"><strong>☁ Cloud backups — ${escapeHtml(monthName(viewingMonth) || 'this month')} report</strong> · saved to your account, visible on every device</div>
+         ${cloudSnaps.length === 0
+           ? `<div class="snapshot-empty" style="margin-bottom:14px;">No cloud backups for this month yet — the first one is taken shortly after your next edit.</div>`
+           : `<div class="snapshot-list" style="margin-bottom:14px;">${cloudSnaps.map((s, i) => rowHtml(s, i)).join('')}</div>`}`;
+    const localBlock = `<div class="input-help" style="margin:0 0 6px;"><strong>💾 This browser only</strong> · backups made on this device (any month)</div>
+      ${localSnaps.length === 0
+        ? `<div class="snapshot-empty">No backups on this device yet — they'll appear here as you work.</div>`
+        : `<div class="snapshot-list">${localSnaps.map((s, i) => rowHtml(s, cloudSnaps.length + i)).join('')}</div>`}`;
+    list.innerHTML = cloudBlock + localBlock;
+
+    list.querySelectorAll('[data-restore-idx]').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const snap = all[Number(btn.dataset.restoreIdx)];
+        if (!snap || !snap.data) { toast('That backup could not be read.', true); return; }
+        const mon = snap.month || (snap.data && snap.data._month) || '';
+        const otherMonth = mon && viewingMonth && mon !== viewingMonth;
+        const ok = await confirmDialog(
+          'Restore backup?',
+          `Replace everything currently shown for ${monthName(viewingMonth) || 'this month'} with the ${snap.source === 'cloud' ? 'cloud' : 'device'} backup from ${dmy(snap.date)}` +
+          (otherMonth ? ` — NOTE: that backup was taken while editing the ${monthName(mon)} report, so ${monthName(mon)}'s data will be written into ${monthName(viewingMonth)}.` : '?') +
+          `\n\nYour current data is backed up first, so this can be undone.`
+        );
+        if (!ok) return;
+        await saveSnapshot(state);
+        try { CloudSync.queueSnapshot(state); await CloudSync.flushSnapshot(); } catch (e) {}
+        const restored = migrateState(JSON.parse(JSON.stringify(snap.data)));
+        // The restored copy must stay attached to the month on screen
+        restored._month = viewingMonth || restored._month;
+        restored._owner = CloudSync.getViewingEmail() || restored._owner;
+        state = restored;
+        currentView = { type: 'meta' };
+        save();
+        renderSidebar();
+        renderContent();
+        closeStorageModal();
+        toast(`Restored ${snap.source === 'cloud' ? 'cloud' : 'device'} backup from ${dmy(snap.date)}`);
       });
-    }
+    });
   }
   async function handlePickFile() {
     try {
