@@ -1089,6 +1089,13 @@
     background: var(--green);
   }
   .week-tab.active.has-data::after { background: #fff; }
+  .planner-consultant {
+    color: var(--navy);
+    font-weight: 700;
+    text-transform: none;
+    letter-spacing: 0.02em;
+    font-size: 13px;
+  }
   .planner-wrap { overflow-x: auto; }
   .planner-table {
     width: 100%;
@@ -4650,6 +4657,16 @@
     }
     return n;
   }
+  // Consultant shown on the planner: the name typed on Cover & Stats, or
+  // failing that the signed-in Google account name of the report's owner.
+  function plannerConsultantName() {
+    const typed = ((state.meta && state.meta.consultant) || '').trim();
+    if (typed) return typed;
+    const u = CloudSync.getCurrentUser && CloudSync.getCurrentUser();
+    const viewing = CloudSync.getViewingEmail && CloudSync.getViewingEmail();
+    if (u && (!viewing || viewing === u.email)) return (u.displayName || u.email || '').trim();
+    return (viewing || '').trim(); // admin viewing someone else with no name typed yet
+  }
   function plannerWeekLabel(week) {
     const a = week.days[0], b = week.days[4];
     const sameMonth = a.getMonth() === b.getMonth();
@@ -4721,9 +4738,10 @@
       <div class="card">
         <div class="card-header">
           <div class="card-title">Week ${week.num}</div>
-          <div class="card-subtitle">${escapeHtml(plannerWeekLabel(week))}</div>
-          <div style="margin-left:auto;">
+          <div class="card-subtitle">${escapeHtml(plannerWeekLabel(week))}${plannerConsultantName() ? ` &nbsp;·&nbsp; <span class="planner-consultant">${escapeHtml(plannerConsultantName())}</span>` : ''}</div>
+          <div style="margin-left:auto; display:flex; gap:8px; align-items:center;">
             <button class="btn-ghost btn-sm" id="plannerClearWeekBtn" title="Clear every slot and note for this week">Clear week</button>
+            <button class="btn-secondary btn-sm" id="plannerPrintBtn" title="Print this week's planner">🖨 Print week</button>
           </div>
         </div>
         <div class="week-tabs" id="plannerWeekTabs">${tabs}</div>
@@ -4831,6 +4849,10 @@
       }, 0);
     });
 
+    // Print week
+    const printBtn = document.getElementById('plannerPrintBtn');
+    if (printBtn) printBtn.addEventListener('click', () => printPlannerWeek(week, monthKey));
+
     // Clear week
     const clearBtn = document.getElementById('plannerClearWeekBtn');
     if (clearBtn) clearBtn.addEventListener('click', async () => {
@@ -4848,6 +4870,102 @@
   function updatePlannerBadge() {
     const badge = document.getElementById('plannerCountBadge');
     if (badge) badge.textContent = plannerEntryCount();
+  }
+
+  // ----- Print one week of the planner -----
+  // Opens a clean, print-only page (no sidebar, no input boxes) in a new
+  // tab and triggers the browser's print dialog. Landscape A4 by default
+  // so the five day columns get room.
+  function printPlannerWeek(week, monthKey) {
+    const data = plannerWeekData(week.key, false);
+    const [y, m] = monthKey.split('-').map(Number);
+    const monthLabel = new Date(y, m - 1, 1).toLocaleDateString('en-ZA', { month: 'long', year: 'numeric' });
+    const meta = state.meta || {};
+    const consultant = plannerConsultantName();
+    const region = (meta.region || '').trim();
+    const nl = (s) => escapeHtml(s || '').replace(/\r?\n/g, '<br>');
+
+    const head = week.days.map((d, di) => {
+      const outside = d.getMonth() !== m - 1;
+      return `<th class="${outside ? 'outside' : ''}">${PLANNER_DAY_NAMES[di]}<span class="pdate">${plannerDmy(d)}</span></th>`;
+    }).join('');
+    const rows = PLANNER_SLOTS.map((slot, si) => `
+      <tr>
+        <td class="ptime">${slot.label}</td>
+        ${week.days.map((d, di) => `<td class="${d.getMonth() !== m - 1 ? 'outside' : ''}">${nl(data.slots[`${si}_${di}`])}</td>`).join('')}
+      </tr>`).join('');
+    const notes = (data.notes || []).filter(n => (n.text || '').trim() || (n.date || '').trim());
+    const notesHtml = notes.length === 0
+      ? `<p class="none">No detailed notes for this week.</p>`
+      : `<table class="notes"><thead><tr><th class="nd">Date</th><th>Notes</th></tr></thead><tbody>
+          ${notes.map(n => `<tr><td class="nd">${escapeHtml(n.date || '—')}</td><td>${nl(n.text)}</td></tr>`).join('')}
+         </tbody></table>`;
+
+    const html = `<!DOCTYPE html><html lang="en"><head><meta charset="utf-8">
+<title>Weekly Planner – Week ${week.num} – ${escapeHtml(plannerWeekLabel(week))}</title>
+<style>
+  @page { size: A4 landscape; margin: 12mm; }
+  * { box-sizing: border-box; }
+  body { font-family: Calibri, 'Segoe UI', Arial, sans-serif; color: #1F2937; margin: 0; padding: 16px; font-size: 10.5pt; }
+  table, h2, .foot { page-break-inside: avoid; }
+  .hdr { display: flex; align-items: center; gap: 14px; border-bottom: 3px solid #C8553D; padding-bottom: 8px; margin-bottom: 10px; }
+  .hdr img { width: 46px; height: 46px; border-radius: 4px; }
+  .hdr .co { font-weight: 700; color: #1F3A5F; letter-spacing: 0.08em; font-size: 11pt; }
+  .hdr .sub { color: #4A5568; font-size: 9.5pt; margin-top: 2px; }
+  .hdr .right { margin-left: auto; text-align: right; font-size: 9.5pt; color: #4A5568; }
+  h1 { font-size: 18pt; color: #162A45; margin: 0 0 2px; }
+  h1 small { font-weight: 400; color: #C8553D; font-size: 12pt; margin-left: 10px; }
+  .who { color: #4A5568; margin: 0 0 10px; font-size: 10pt; }
+  table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+  th, td { border: 1px solid #D8D2C7; padding: 2px 6px; vertical-align: top; text-align: left; }
+  thead th { background: #1F3A5F; color: #fff; text-align: center; font-size: 9pt; letter-spacing: 0.08em; padding: 5px 6px; }
+  thead th.outside { background: #4A5568; }
+  thead th .pdate { display: block; font-weight: 400; letter-spacing: 0; font-size: 9pt; margin-top: 1px; }
+  th.tcol { width: 92px; text-align: left; }
+  td.ptime { width: 92px; background: #F4F1EC; color: #1F3A5F; font-weight: 700; font-size: 9pt; white-space: nowrap; }
+  tbody tr:nth-child(even) td { background: #FAF8F4; }
+  tbody tr:nth-child(even) td.ptime { background: #F4F1EC; }
+  td.outside { background: #F1F1F1 !important; }
+  tbody td { height: 16px; font-size: 9.5pt; line-height: 1.2; }
+  h2 { font-size: 11pt; color: #C8553D; letter-spacing: 0.08em; text-transform: uppercase; margin: 14px 0 6px; }
+  table.notes th.nd, table.notes td.nd { width: 110px; font-weight: 700; }
+  table.notes td.nd { color: #1F3A5F; }
+  table.notes thead th { text-align: left; }
+  .none { color: #718096; font-style: italic; margin: 4px 0; }
+  .foot { margin-top: 8px; border-top: 1px solid #E2DDD2; padding-top: 6px; font-size: 8.5pt; color: #718096; display: flex; justify-content: space-between; }
+  @media print { body { padding: 0; } .noprint { display: none; } }
+  .noprint { margin-bottom: 12px; }
+  .noprint button { font: inherit; padding: 8px 14px; border-radius: 6px; border: 1px solid #D8D2C7; background: #C8553D; color: #fff; cursor: pointer; }
+</style></head><body>
+  <div class="noprint"><button onclick="window.print()">🖨 Print</button> <span style="color:#718096;font-size:9.5pt;margin-left:8px;">If the print dialog didn't open automatically, click Print. Choose landscape for best results.</span></div>
+  <div class="hdr">
+    <img src="data:image/jpeg;base64,${LOGO_B64}" alt="Ubuntu">
+    <div>
+      <div class="co">UBUNTU RESOURCE MANAGEMENT (PTY) LTD</div>
+      <div class="sub">Industrial Relations &amp; Payroll &nbsp;•&nbsp; Weekly Planner</div>
+    </div>
+    <div class="right">${escapeHtml(monthLabel)}<br>Printed ${plannerDmy(new Date())}</div>
+  </div>
+  <h1>Week ${week.num} <small>${escapeHtml(plannerWeekLabel(week))}${consultant ? ` &nbsp;•&nbsp; ${escapeHtml(consultant)}` : ''}</small></h1>
+  <p class="who">${consultant ? `Consultant: <strong>${escapeHtml(consultant)}</strong>` : ''}${consultant && region ? ' &nbsp;•&nbsp; ' : ''}${region ? `Region: <strong>${escapeHtml(region)}</strong>` : ''}</p>
+  <table>
+    <thead><tr><th class="tcol">TIME</th>${head}</tr></thead>
+    <tbody>${rows}</tbody>
+  </table>
+  <h2>Detailed Notes</h2>
+  ${notesHtml}
+  <div class="foot"><span>Ubuntu Resource Management (Pty) Ltd &nbsp;|&nbsp; Weekly Planner &nbsp;|&nbsp; ${escapeHtml(region ? region + ' – ' : '')}${escapeHtml(monthLabel)}</span><span>Week ${week.num} of ${plannerWeeks(monthKey).length}</span></div>
+  <scr${''}ipt>window.addEventListener('load', function () { setTimeout(function () { try { window.print(); } catch (e) {} }, 250); });<\/script>
+</body></html>`;
+
+    const win = window.open('', '_blank');
+    if (!win) {
+      toast('Pop-up blocked — allow pop-ups for this site to print the planner.', true);
+      return;
+    }
+    win.document.open();
+    win.document.write(html);
+    win.document.close();
   }
 
   // ----- Trip log helpers -----
@@ -6177,6 +6295,7 @@
             children: [
               new TextRun({ text: `Week ${week.num}`, bold: true, color: NAVY_DARK, size: 24, font: "Calibri" }),
               new TextRun({ text: `   ${plannerWeekLabel(week)}`, color: SLATE, size: 20, font: "Calibri" }),
+              ...(plannerConsultantName() ? [new TextRun({ text: `   •   ${plannerConsultantName()}`, bold: true, color: ACCENT, size: 20, font: "Calibri" })] : []),
             ],
           }),
           new Table({ width: { size: 9360, type: WidthType.DXA }, columnWidths: [TIME_W, DAY_W, DAY_W, DAY_W, DAY_W, DAY_W], rows }),
