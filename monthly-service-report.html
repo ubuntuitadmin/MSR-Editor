@@ -1051,6 +1051,125 @@
   }
   .activity-stat .sub strong { color: var(--accent); font-weight: 600; }
 
+  /* Weekly planner */
+  .week-tabs {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+    margin-bottom: 14px;
+  }
+  .week-tab {
+    padding: 7px 12px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: var(--paper);
+    color: var(--ink);
+    font-size: 12.5px;
+    font-weight: 600;
+    text-align: left;
+    line-height: 1.2;
+    position: relative;
+  }
+  .week-tab .wt-dates {
+    display: block;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10.5px;
+    font-weight: 400;
+    color: var(--muted);
+    margin-top: 2px;
+  }
+  .week-tab.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .week-tab.active .wt-dates { color: rgba(255,255,255,0.8); }
+  .week-tab.has-data::after {
+    content: '';
+    position: absolute;
+    top: 6px; right: 6px;
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    background: var(--green);
+  }
+  .week-tab.active.has-data::after { background: #fff; }
+  .planner-wrap { overflow-x: auto; }
+  .planner-table {
+    width: 100%;
+    border-collapse: collapse;
+    table-layout: fixed;
+    font-size: 12.5px;
+    min-width: 720px;
+  }
+  .planner-table th, .planner-table td {
+    border: 1px solid var(--soft-line);
+    padding: 0;
+    vertical-align: top;
+  }
+  .planner-table th {
+    background: var(--cream);
+    padding: 8px 6px;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--ink-soft);
+    font-weight: 600;
+    text-align: center;
+  }
+  .planner-table th .pdate {
+    display: block;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: var(--navy);
+    text-transform: none;
+    letter-spacing: 0;
+    margin-top: 2px;
+  }
+  .planner-table th.outside { color: var(--muted); }
+  .planner-table th.outside .pdate { color: var(--muted); }
+  .planner-table th.today { background: rgba(200,85,61,0.10); color: var(--accent); }
+  .planner-table th.today .pdate { color: var(--accent); }
+  .planner-table col.ptime-col { width: 112px; }
+  .planner-table td.ptime {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: var(--muted);
+    padding: 7px 8px;
+    background: var(--cream);
+    white-space: nowrap;
+  }
+  .planner-table textarea {
+    width: 100%;
+    border: none;
+    border-radius: 0;
+    background: transparent;
+    padding: 6px 8px;
+    min-height: 34px;
+    resize: none;
+    font-size: 12.5px;
+    line-height: 1.35;
+    display: block;
+    overflow: hidden;
+  }
+  .planner-table textarea:focus {
+    box-shadow: inset 0 0 0 2px rgba(200,85,61,0.25);
+    background: #fff;
+  }
+  .planner-table td.outside textarea { background: rgba(0,0,0,0.03); }
+  .planner-table td.filled textarea { background: #FFF8F1; }
+  .planner-note-row {
+    display: grid;
+    grid-template-columns: 130px 1fr auto;
+    gap: 10px;
+    align-items: start;
+    margin-bottom: 8px;
+    padding: 10px;
+    background: var(--cream);
+    border: 1px solid var(--soft-line);
+    border-radius: 6px;
+  }
+  .planner-note-row input, .planner-note-row textarea { background: #fff; }
+  .planner-note-row textarea { min-height: 44px; font-size: 13px; }
+  @media (max-width: 640px) {
+    .planner-note-row { grid-template-columns: 1fr; }
+  }
+
   /* Hidden helper */
   .hidden { display: none !important; }
   .help-banner {
@@ -1658,6 +1777,7 @@
     <div class="nav-section">Report</div>
     <ul class="nav-list" id="metaNav">
       <li class="nav-item" data-view="meta"><span class="num">◆</span><span>Cover & Stats</span></li>
+      <li class="nav-item" data-view="planner"><span class="num">▤</span><span>Weekly Planner</span><span class="visits" id="plannerCountBadge">0</span></li>
     </ul>
 
     <div class="nav-section">Logistics</div>
@@ -1842,7 +1962,7 @@
   document.getElementById('brandLogo').src = 'data:image/jpeg;base64,' + LOGO_B64;
 
   // ----- Default March 2026 dataset -----
-  const DEFAULT_STATE = {"meta":{"consultant":"","region":"","month":"","year":"","period":"","status":"Draft","stats":{"clientsAssisted":"","clientVisits":"","kilometres":"","outsourcedClients":"","payrollOnlyClients":"","otherClients":"","outsourcedEmployees":"","payrollOnlyEmployees":""}},"clients":[],"otherClients":[],"trips":[],"tripFilter":{"client":"","from":"","to":""},"ccma":{"fox-street":[],"benoni":[],"pretoria":[]},"bargaining":{"metal-engineering-braamfontein":[],"drc-randburg":[],"road-freight-braamfontein":[]}};
+  const DEFAULT_STATE = {"meta":{"consultant":"","region":"","month":"","year":"","period":"","status":"Draft","stats":{"clientsAssisted":"","clientVisits":"","kilometres":"","outsourcedClients":"","payrollOnlyClients":"","otherClients":"","outsourcedEmployees":"","payrollOnlyEmployees":""}},"clients":[],"otherClients":[],"trips":[],"tripFilter":{"client":"","from":"","to":""},"ccma":{"fox-street":[],"benoni":[],"pretoria":[]},"bargaining":{"metal-engineering-braamfontein":[],"drc-randburg":[],"road-freight-braamfontein":[]},"planner":{}};
 
   const STORAGE_KEY = 'ubuntu_msr_v3';
 
@@ -2276,6 +2396,7 @@
     if (!s.meta.stats) s.meta.stats = JSON.parse(JSON.stringify(DEFAULT_STATE.meta.stats));
     if (!Array.isArray(s.clients)) s.clients = [];
     if (!Array.isArray(s.otherClients)) s.otherClients = [];
+    if (!s.planner || typeof s.planner !== 'object' || Array.isArray(s.planner)) s.planner = {};
     if (typeof s._updatedAt !== 'number') s._updatedAt = 0;
     // Ensure every client has a 'type' field (defaults to unset)
     for (const c of s.clients) {
@@ -3544,7 +3665,9 @@
       el.classList.toggle('active', false);
     });
     if (currentView.type === 'meta') {
-      document.querySelector('#metaNav .nav-item').classList.add('active');
+      document.querySelector('#metaNav .nav-item[data-view="meta"]').classList.add('active');
+    } else if (currentView.type === 'planner') {
+      document.querySelector('#metaNav .nav-item[data-view="planner"]').classList.add('active');
     } else if (currentView.type === 'other') {
       document.querySelector('.nav-item[data-view="other"]').classList.add('active');
     } else if (currentView.type === 'trips') {
@@ -3559,6 +3682,7 @@
     // Update trip count badge
     const badge = document.getElementById('tripCountBadge');
     if (badge) badge.textContent = (state.trips || []).length;
+    updatePlannerBadge();
   }
 
   function renderContent() {
@@ -3578,6 +3702,10 @@
       title.textContent = 'Cover & Stats';
       c.innerHTML = renderMetaView();
       bindMetaEvents();
+    } else if (currentView.type === 'planner') {
+      title.textContent = 'Weekly Planner';
+      c.innerHTML = renderPlannerView();
+      bindPlannerEvents();
     } else if (currentView.type === 'other') {
       title.textContent = 'Other Clients Assisted';
       c.innerHTML = renderOtherView();
@@ -4436,6 +4564,290 @@
         if (inputs.length) inputs[inputs.length - 1].focus();
       }, 0);
     });
+  }
+
+  // ============================================================
+  //  WEEKLY PLANNER
+  //  One planner grid per working week (Mon–Fri) of the reporting
+  //  month, 07h30–16h30 in half-hour slots, plus dated "Detailed
+  //  Notes". Dates are derived from the reporting month, never typed.
+  //  Storage (sparse, so Firestore docs stay small):
+  //    state.planner[<monday YYYY-MM-DD>] = {
+  //      slots: { "<slotIdx>_<dayIdx>": "text", ... },
+  //      notes: [ { date: "14/09/2026", text: "..." }, ... ]
+  //    }
+  // ============================================================
+  const PLANNER_DAY_NAMES = ['MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY'];
+  const PLANNER_SLOTS = (() => {
+    const out = [];
+    for (let mins = 7 * 60 + 30; mins < 16 * 60 + 30; mins += 30) {
+      const f = (m) => `${String(Math.floor(m / 60)).padStart(2, '0')}h${String(m % 60).padStart(2, '0')}`;
+      out.push({ start: f(mins), end: f(mins + 30), label: `${f(mins)} – ${f(mins + 30)}` });
+    }
+    return out; // 18 slots: 07h30–08h00 … 16h00–16h30
+  })();
+
+  function plannerIso(d) {
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  }
+  function plannerDmy(d) {
+    return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`;
+  }
+  function plannerShort(d) {
+    return d.toLocaleDateString('en-ZA', { day: 'numeric', month: 'short' });
+  }
+
+  // The reporting month the planner belongs to: the month currently loaded
+  // from the cloud, falling back to the calendar month when signed out.
+  function plannerMonthKey() {
+    const k = (typeof CloudSync !== 'undefined' && CloudSync.getCurrentMonth && CloudSync.getCurrentMonth());
+    if (k && /^\d{4}-\d{2}$/.test(k)) return k;
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+  }
+
+  // Every Mon–Fri week that touches the reporting month, in order.
+  // A week whose five weekdays all fall outside the month is skipped
+  // (e.g. a month that starts on a Saturday).
+  function plannerWeeks(monthKey) {
+    const [y, m] = monthKey.split('-').map(Number);
+    const first = new Date(y, m - 1, 1);
+    const last  = new Date(y, m, 0);
+    let monday = new Date(first);
+    monday.setDate(monday.getDate() - ((monday.getDay() + 6) % 7)); // back to Monday
+    const weeks = [];
+    while (monday <= last) {
+      const days = [];
+      for (let i = 0; i < 5; i++) days.push(new Date(monday.getFullYear(), monday.getMonth(), monday.getDate() + i));
+      if (days.some(d => d.getMonth() === m - 1)) {
+        weeks.push({ key: plannerIso(monday), monday, days, num: weeks.length + 1 });
+      }
+      monday = new Date(monday.getFullYear(), monday.getMonth(), monday.getDate() + 7);
+    }
+    return weeks;
+  }
+
+  function plannerWeekData(weekKey, create) {
+    if (!state.planner) state.planner = {};
+    let w = state.planner[weekKey];
+    if (!w && create) w = state.planner[weekKey] = { slots: {}, notes: [] };
+    if (w) {
+      if (!w.slots || typeof w.slots !== 'object') w.slots = {};
+      if (!Array.isArray(w.notes)) w.notes = [];
+    }
+    return w || { slots: {}, notes: [] };
+  }
+  function plannerWeekHasData(weekKey) {
+    const w = state.planner && state.planner[weekKey];
+    if (!w) return false;
+    if (Object.values(w.slots || {}).some(v => String(v || '').trim())) return true;
+    return (w.notes || []).some(n => (n.text || '').trim() || (n.date || '').trim());
+  }
+  function plannerEntryCount() {
+    let n = 0;
+    for (const w of Object.values(state.planner || {})) {
+      n += Object.values(w.slots || {}).filter(v => String(v || '').trim()).length;
+    }
+    return n;
+  }
+  function plannerWeekLabel(week) {
+    const a = week.days[0], b = week.days[4];
+    const sameMonth = a.getMonth() === b.getMonth();
+    const yr = b.getFullYear();
+    return sameMonth
+      ? `${a.getDate()} – ${b.getDate()} ${b.toLocaleDateString('en-ZA', { month: 'long' })} ${yr}`
+      : `${plannerShort(a)} – ${plannerShort(b)} ${yr}`;
+  }
+
+  // Which week tab is open. Defaults to the week containing today when the
+  // reporting month is the current month, otherwise week 1.
+  let plannerWeekIdx = null;
+  function plannerDefaultWeekIdx(weeks) {
+    const todayIso = plannerIso(new Date());
+    const i = weeks.findIndex(w => w.days.some(d => plannerIso(d) === todayIso));
+    return i >= 0 ? i : 0;
+  }
+
+  function renderPlannerView() {
+    const monthKey = plannerMonthKey();
+    const weeks = plannerWeeks(monthKey);
+    if (plannerWeekIdx === null || plannerWeekIdx >= weeks.length) plannerWeekIdx = plannerDefaultWeekIdx(weeks);
+    const week = weeks[plannerWeekIdx];
+    const data = plannerWeekData(week.key, false);
+    const [y, m] = monthKey.split('-').map(Number);
+    const monthLabel = new Date(y, m - 1, 1).toLocaleDateString('en-ZA', { month: 'long', year: 'numeric' });
+    const todayIso = plannerIso(new Date());
+
+    const tabs = weeks.map((w, i) => `
+      <button class="week-tab ${i === plannerWeekIdx ? 'active' : ''} ${plannerWeekHasData(w.key) ? 'has-data' : ''}" data-week-idx="${i}" type="button">
+        Week ${w.num}
+        <span class="wt-dates">${plannerShort(w.days[0])} – ${plannerShort(w.days[4])}</span>
+      </button>
+    `).join('');
+
+    const head = week.days.map((d, di) => {
+      const outside = d.getMonth() !== m - 1;
+      const isToday = plannerIso(d) === todayIso;
+      return `<th class="${outside ? 'outside' : ''} ${isToday ? 'today' : ''}" title="${outside ? 'Outside the reporting month' : ''}">${PLANNER_DAY_NAMES[di]}<span class="pdate">${plannerDmy(d)}</span></th>`;
+    }).join('');
+
+    const rows = PLANNER_SLOTS.map((slot, si) => `
+      <tr>
+        <td class="ptime">${slot.label}</td>
+        ${week.days.map((d, di) => {
+          const key = `${si}_${di}`;
+          const val = (data.slots && data.slots[key]) || '';
+          const outside = d.getMonth() !== m - 1;
+          return `<td class="${outside ? 'outside' : ''} ${val.trim() ? 'filled' : ''}"><textarea rows="1" data-planner-slot="${key}" placeholder="">${escapeHtml(val)}</textarea></td>`;
+        }).join('')}
+      </tr>
+    `).join('');
+
+    const notes = (data.notes || []).map((n, i) => `
+      <div class="planner-note-row" data-note-idx="${i}">
+        <input type="text" data-note-field="date" placeholder="${plannerDmy(week.days[0])}" value="${escapeHtml(n.date || '')}" list="plannerDateList" />
+        <textarea data-note-field="text" rows="2" placeholder="Detailed notes for this day…">${escapeHtml(n.text || '')}</textarea>
+        <button class="btn-danger btn-sm" data-note-action="remove" title="Remove">✕</button>
+      </div>
+    `).join('');
+
+    return `
+      <div class="help-banner">
+        <strong>Weekly Planner — ${escapeHtml(monthLabel)}.</strong> Plan each working week in half-hour slots.
+        The Monday–Friday dates are worked out automatically from the reporting month — pick a week below.
+        Everything you type is saved with this month's report and printed in the Word document.
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title">Week ${week.num}</div>
+          <div class="card-subtitle">${escapeHtml(plannerWeekLabel(week))}</div>
+          <div style="margin-left:auto;">
+            <button class="btn-ghost btn-sm" id="plannerClearWeekBtn" title="Clear every slot and note for this week">Clear week</button>
+          </div>
+        </div>
+        <div class="week-tabs" id="plannerWeekTabs">${tabs}</div>
+        <div class="planner-wrap">
+          <table class="planner-table">
+            <colgroup><col class="ptime-col" /><col /><col /><col /><col /><col /></colgroup>
+            <thead><tr><th style="text-align:left;">Time</th>${head}</tr></thead>
+            <tbody>${rows}</tbody>
+          </table>
+        </div>
+        <p class="input-help" style="margin-top:8px;">
+          Tip: press Enter inside a slot for a second line. Greyed columns are days that fall outside the reporting month — you can still use them.
+        </p>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title" style="font-size:20px;">Detailed Notes</div>
+          <div class="card-subtitle">Week ${week.num} · longer notes by date</div>
+        </div>
+        <div id="plannerNotesList">${notes}</div>
+        <datalist id="plannerDateList">
+          ${week.days.map(d => `<option value="${plannerDmy(d)}"></option>`).join('')}
+        </datalist>
+        <button class="add-visit-btn" id="plannerAddNoteBtn">+ Add Note</button>
+      </div>
+    `;
+  }
+
+  function plannerAutoGrow(ta) {
+    ta.style.height = 'auto';
+    ta.style.height = Math.max(34, ta.scrollHeight) + 'px';
+  }
+
+  function bindPlannerEvents() {
+    const monthKey = plannerMonthKey();
+    const weeks = plannerWeeks(monthKey);
+    const week = weeks[plannerWeekIdx] || weeks[0];
+    if (!week) return;
+
+    // Week tabs
+    document.querySelectorAll('#plannerWeekTabs .week-tab').forEach(btn => {
+      btn.addEventListener('click', () => {
+        plannerWeekIdx = Number(btn.dataset.weekIdx);
+        renderContent();
+      });
+    });
+
+    // Slot cells
+    document.querySelectorAll('textarea[data-planner-slot]').forEach(ta => {
+      plannerAutoGrow(ta);
+      ta.addEventListener('input', e => {
+        const key = e.target.dataset.plannerSlot;
+        const w = plannerWeekData(week.key, true);
+        const v = e.target.value;
+        if (v.trim()) w.slots[key] = v; else delete w.slots[key];
+        e.target.parentElement.classList.toggle('filled', !!v.trim());
+        plannerAutoGrow(e.target);
+        save();
+        updatePlannerBadge();
+      });
+      // Keyboard navigation: Tab moves across, Ctrl+Enter moves down
+      ta.addEventListener('keydown', e => {
+        if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+          e.preventDefault();
+          const [si, di] = e.target.dataset.plannerSlot.split('_').map(Number);
+          const next = document.querySelector(`textarea[data-planner-slot="${si + 1}_${di}"]`);
+          if (next) next.focus();
+        }
+      });
+    });
+
+    // Notes
+    document.querySelectorAll('.planner-note-row').forEach(row => {
+      const i = Number(row.dataset.noteIdx);
+      row.querySelectorAll('[data-note-field]').forEach(f => {
+        f.addEventListener('input', e => {
+          const w = plannerWeekData(week.key, true);
+          if (!w.notes[i]) w.notes[i] = { date: '', text: '' };
+          w.notes[i][e.target.dataset.noteField] = e.target.value;
+          save();
+        });
+      });
+      row.querySelector('[data-note-action="remove"]').addEventListener('click', async () => {
+        const w = plannerWeekData(week.key, true);
+        const n = w.notes[i] || {};
+        if ((n.text || '').trim()) {
+          const ok = await confirmDialog('Remove note?', `The note for ${n.date || 'this day'} will be removed.`);
+          if (!ok) return;
+        }
+        w.notes.splice(i, 1);
+        save();
+        renderContent();
+      });
+    });
+    const addNote = document.getElementById('plannerAddNoteBtn');
+    if (addNote) addNote.addEventListener('click', () => {
+      const w = plannerWeekData(week.key, true);
+      w.notes.push({ date: '', text: '' });
+      save();
+      renderContent();
+      setTimeout(() => {
+        const inputs = document.querySelectorAll('.planner-note-row input');
+        if (inputs.length) inputs[inputs.length - 1].focus();
+      }, 0);
+    });
+
+    // Clear week
+    const clearBtn = document.getElementById('plannerClearWeekBtn');
+    if (clearBtn) clearBtn.addEventListener('click', async () => {
+      if (!plannerWeekHasData(week.key)) { toast('This week is already empty'); return; }
+      const ok = await confirmDialog('Clear this week?', `All slots and notes for Week ${week.num} (${plannerWeekLabel(week)}) will be removed.`);
+      if (!ok) return;
+      delete state.planner[week.key];
+      save();
+      renderContent();
+      renderSidebar();
+      toast(`Week ${week.num} cleared`);
+    });
+  }
+
+  function updatePlannerBadge() {
+    const badge = document.getElementById('plannerCountBadge');
+    if (badge) badge.textContent = plannerEntryCount();
   }
 
   // ----- Trip log helpers -----
@@ -5684,6 +6096,127 @@
       );
     }
 
+    // ---- Weekly Planner (every week of the reporting month) ----
+    {
+      const monthKey = plannerMonthKey();
+      const weeks = plannerWeeks(monthKey);
+      const [py, pm] = monthKey.split('-').map(Number);
+      const monthName = new Date(py, pm - 1, 1).toLocaleDateString('en-ZA', { month: 'long', year: 'numeric' });
+      const TIME_W = 1160, DAY_W = 1640; // 1160 + 5×1640 = 9360
+      const SMALL = 16; // 8pt — keeps five day columns legible on a portrait page
+
+      const dayHeaderCell = (d, outside) => new TableCell({
+        borders: cellBorders,
+        width: { size: DAY_W, type: WidthType.DXA },
+        shading: { fill: outside ? SLATE : ROW_HDR, type: ShadingType.CLEAR, color: "auto" },
+        margins: { top: 80, bottom: 80, left: 80, right: 80 },
+        verticalAlign: VerticalAlign.CENTER,
+        children: [
+          new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: PLANNER_DAY_NAMES[d.getDay() - 1] || '', bold: true, color: "FFFFFF", size: SMALL, font: "Calibri", characterSpacing: 20 })] }),
+          new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: plannerDmy(d), color: "FFFFFF", size: SMALL, font: "Calibri" })] }),
+        ],
+      });
+      const slotCell = (text, fill) => new TableCell({
+        borders: cellBorders,
+        width: { size: DAY_W, type: WidthType.DXA },
+        shading: fill ? { fill, type: ShadingType.CLEAR, color: "auto" } : undefined,
+        margins: { top: 50, bottom: 50, left: 80, right: 80 },
+        verticalAlign: VerticalAlign.TOP,
+        children: (String(text || '').split(/\r?\n/).filter((l, i, a) => l.trim() || a.length === 1)).map(line =>
+          new Paragraph({ children: [new TextRun({ text: line, color: "1F2937", size: SMALL, font: "Calibri" })] })
+        ),
+      });
+
+      children.push(
+        sectionHeading("Weekly Planner"),
+        p(`Half-hour planner for each working week of ${monthName}. Days shaded grey fall outside the reporting month.`, { color: SLATE, size: 20, spacing: { before: 0, after: 120 } }),
+      );
+
+      weeks.forEach((week, wi) => {
+        const data = plannerWeekData(week.key, false);
+        const rows = [
+          new TableRow({
+            tableHeader: true,
+            children: [
+              new TableCell({
+                borders: cellBorders,
+                width: { size: TIME_W, type: WidthType.DXA },
+                shading: { fill: ROW_HDR, type: ShadingType.CLEAR, color: "auto" },
+                margins: { top: 80, bottom: 80, left: 80, right: 80 },
+                verticalAlign: VerticalAlign.CENTER,
+                children: [new Paragraph({ children: [new TextRun({ text: "TIME", bold: true, color: "FFFFFF", size: SMALL, font: "Calibri", characterSpacing: 20 })] })],
+              }),
+              ...week.days.map(d => dayHeaderCell(d, d.getMonth() !== pm - 1)),
+            ],
+          }),
+          ...PLANNER_SLOTS.map((slot, si) => {
+            const fill = si % 2 ? ROW_ALT : undefined;
+            return new TableRow({
+              cantSplit: true,
+              children: [
+                new TableCell({
+                  borders: cellBorders,
+                  width: { size: TIME_W, type: WidthType.DXA },
+                  shading: { fill: ROW_ALT, type: ShadingType.CLEAR, color: "auto" },
+                  margins: { top: 50, bottom: 50, left: 80, right: 80 },
+                  verticalAlign: VerticalAlign.TOP,
+                  children: [new Paragraph({ children: [new TextRun({ text: slot.label, bold: true, color: NAVY, size: SMALL, font: "Calibri" })] })],
+                }),
+                ...week.days.map((d, di) => slotCell(data.slots[`${si}_${di}`] || '', fill)),
+              ],
+            });
+          }),
+        ];
+
+        children.push(
+          new Paragraph({
+            spacing: { before: wi === 0 ? 120 : 320, after: 100 },
+            keepNext: true,
+            pageBreakBefore: wi > 0, // one week per page keeps the grid intact
+            border: { bottom: { style: BorderStyle.SINGLE, size: 4, color: NAVY, space: 4 } },
+            children: [
+              new TextRun({ text: `Week ${week.num}`, bold: true, color: NAVY_DARK, size: 24, font: "Calibri" }),
+              new TextRun({ text: `   ${plannerWeekLabel(week)}`, color: SLATE, size: 20, font: "Calibri" }),
+            ],
+          }),
+          new Table({ width: { size: 9360, type: WidthType.DXA }, columnWidths: [TIME_W, DAY_W, DAY_W, DAY_W, DAY_W, DAY_W], rows }),
+        );
+
+        // Detailed notes for the week
+        const notes = (data.notes || []).filter(n => (n.text || '').trim() || (n.date || '').trim());
+        children.push(subHeading("Detailed Notes"));
+        if (notes.length === 0) {
+          children.push(new Table({
+            width: { size: 9360, type: WidthType.DXA },
+            columnWidths: [9360],
+            rows: [new TableRow({ children: [bodyCell("No detailed notes for this week.", 9360, { italic: true, color: MUTED, size: 18 })] })],
+          }));
+        } else {
+          children.push(new Table({
+            width: { size: 9360, type: WidthType.DXA },
+            columnWidths: [1800, 7560],
+            rows: [
+              new TableRow({ tableHeader: true, children: [headerCell("Date", 1800), headerCell("Notes", 7560)] }),
+              ...notes.map((n, i) => new TableRow({
+                cantSplit: true,
+                children: [
+                  bodyCell(n.date || "—", 1800, { fill: i % 2 ? ROW_ALT : undefined, bold: true, color: NAVY, valign: VerticalAlign.TOP, size: 18 }),
+                  multiCell(
+                    String(n.text || '').split(/\r?\n/).filter((l, idx, a) => l.trim() || a.length === 1).map((line, idx) => new Paragraph({
+                      spacing: { before: idx === 0 ? 0 : 40, after: 0 },
+                      children: [new TextRun({ text: line, color: "1F2937", size: 18, font: "Calibri" })],
+                    })),
+                    7560,
+                    { fill: i % 2 ? ROW_ALT : undefined, valign: VerticalAlign.TOP }
+                  ),
+                ],
+              })),
+            ],
+          }));
+        }
+      });
+    }
+
     children.push(
       spacer(360),
       p("— End of Report —", { align: AlignmentType.CENTER, color: MUTED, italic: true, size: 18 }),
@@ -6614,8 +7147,14 @@
   // ============================================================
 
   function bindGlobalEvents() {
-    document.querySelector('#metaNav .nav-item').addEventListener('click', () => {
+    document.querySelector('#metaNav .nav-item[data-view="meta"]').addEventListener('click', () => {
       currentView = { type: 'meta' };
+      renderSidebar();
+      renderContent();
+    });
+    document.querySelector('#metaNav .nav-item[data-view="planner"]').addEventListener('click', () => {
+      currentView = { type: 'planner' };
+      plannerWeekIdx = null; // re-pick the sensible default week for the loaded month
       renderSidebar();
       renderContent();
     });
@@ -6676,7 +7215,7 @@
     document.getElementById('clearMonthBtn').addEventListener('click', async () => {
       const ok = await confirmDialog(
         'Clear this month\'s activity?',
-        'Clear all visits, journey logs (Trip Log, CCMA, Bargaining Council) and summaries logged for THIS reporting month?\n\nYour client list (names, contacts, head counts, payroll frequency, type) and your consultant details are kept. A daily backup is saved first.\n\nYou do not need to do this at month-end — the next month opens as a clean slate automatically, with your clients carried over.'
+        'Clear all visits, journey logs (Trip Log, CCMA, Bargaining Council), summaries and the weekly planner logged for THIS reporting month?\n\nYour client list (names, contacts, head counts, payroll frequency, type) and your consultant details are kept. A daily backup is saved first.\n\nYou do not need to do this at month-end — the next month opens as a clean slate automatically, with your clients carried over.'
       );
       if (!ok) return;
       await clearMonthlyData();
