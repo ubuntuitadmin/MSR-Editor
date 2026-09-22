@@ -7521,7 +7521,12 @@
           let parsed;
           try { parsed = JSON.parse(text); }
           catch (pe) { throw new Error('the file is not readable JSON (' + pe.message + '). Make sure you picked a .json backup, not the Word report.'); }
-          const found = unwrapReportJson(parsed);
+          // Export from the older "Ubuntu Reports" tool? Convert it for the
+          // consultant and month currently on screen. Checked FIRST — its
+          // top-level 'clients' list would otherwise look like a bare roster.
+          let found = isLegacyReportsExport(parsed)
+            ? convertLegacyReportsExport(parsed, CloudSync.getCurrentMonth(), plannerConsultantName())
+            : unwrapReportJson(parsed);
           if (!found) {
             const keys = (parsed && typeof parsed === 'object') ? Object.keys(parsed).slice(0, 8).join(', ') : typeof parsed;
             throw new Error('no report data found in this file. It contains: ' + (keys || 'nothing') + '. A valid backup has "meta" and "clients" at the top.');
@@ -7587,6 +7592,102 @@
       }
     }
     return null;
+  }
+
+  // ============================================================
+  //  LEGACY IMPORT — "Ubuntu Reports" tool (schemaVersion 2)
+  //  { staff:[{id,name}], clients:[{id,name}],
+  //    entries:[{staffId,clientId,date:'YYYY-MM-DD',hours,description}],
+  //    kmEntries:[{staffId,clientId,date,km,reason}] }
+  //  Converted one consultant + one reporting month at a time:
+  //   entry    → a visit note on that client for that date (same client +
+  //              day merged into one visit; hours kept at the end of the note)
+  //   kmEntry  → a Trip Log row (client, km, reason)
+  //   clients  → only those with activity in the month
+  // ============================================================
+  function isLegacyReportsExport(o) {
+    return !!(o && typeof o === 'object' && Array.isArray(o.staff) && Array.isArray(o.entries) && Array.isArray(o.clients)
+              && o.clients.every(c => c && typeof c.name === 'string'));
+  }
+  function legacyFmtHours(h) {
+    const n = Number(h);
+    if (!isFinite(n) || n <= 0) return '';
+    return (Number.isInteger(n) ? String(n) : String(n)) + 'h';
+  }
+  function legacyShortDate(iso) {
+    const [y, m, d] = String(iso).split('-').map(Number);
+    if (!y || !m || !d) return String(iso);
+    return `${d} ${new Date(y, m - 1, d).toLocaleDateString('en-ZA', { month: 'short' })}`;
+  }
+  function convertLegacyReportsExport(o, monthKey, preferredName) {
+    if (!monthKey) throw new Error('no reporting month is open — pick a month first, then load the file again.');
+    const staffById = {}; for (const st of o.staff) staffById[st.id] = st;
+    const clientById = {}; for (const c of o.clients) clientById[c.id] = c.name || '';
+    const inMonth = (e) => String(e.date || '').slice(0, 7) === monthKey;
+
+    // Who does this month's data belong to?
+    const counts = {};
+    for (const e of o.entries.filter(inMonth))    counts[e.staffId] = (counts[e.staffId] || 0) + 1;
+    for (const e of (o.kmEntries || []).filter(inMonth)) counts[e.staffId] = (counts[e.staffId] || 0) + 1;
+    const withData = Object.keys(counts).filter(id => staffById[id]);
+    const norm = (x) => String(x || '').trim().toLowerCase();
+    let staffId = null;
+    if (preferredName) staffId = (o.staff.find(st => norm(st.name) === norm(preferredName)) || {}).id || null;
+    if (staffId && !counts[staffId]) staffId = null;
+    if (!staffId && withData.length === 1) staffId = withData[0];
+    if (!staffId) {
+      const monthsAvail = {};
+      for (const e of o.entries) { const k = String(e.date || '').slice(0, 7); monthsAvail[k] = (monthsAvail[k] || 0) + 1; }
+      const list = Object.keys(monthsAvail).sort().map(k => `${k} (${monthsAvail[k]})`).join(', ');
+      if (withData.length === 0) throw new Error(`this Ubuntu Reports file has no entries for ${monthKey}. Months in the file: ${list || 'none'}. Switch to one of those months and load it again.`);
+      throw new Error(`this Ubuntu Reports file has ${monthKey} data for more than one person (${withData.map(id => staffById[id].name).join(', ')}). Type the right consultant's name in Cover & Stats first, then load it again.`);
+    }
+    const staff = staffById[staffId];
+
+    // Build clients + visits
+    const clients = {}; const order = [];
+    const getClient = (cid) => {
+      const name = clientById[cid] || 'Unknown client';
+      if (!clients[name]) {
+        clients[name] = { name, contact: '', tel: '', headCount: '', frequency: '', type: '', visits: [],
+                          discipline: ['Not at this time.'], followup: ['Not at this time.'], admin: ['Not at this time.'], additional: ['Not at this time.'] };
+        order.push(name);
+      }
+      return clients[name];
+    };
+    const entries = o.entries.filter(e => inMonth(e) && e.staffId === staffId).slice()
+      .sort((a, b) => String(a.date).localeCompare(String(b.date)) || String(a.createdAt || '').localeCompare(String(b.createdAt || '')));
+    let visitCount = 0;
+    for (const e of entries) {
+      const c = getClient(e.clientId);
+      let v = c.visits.find(x => x._iso === e.date);
+      if (!v) { v = { date: legacyShortDate(e.date), notes: [], _iso: e.date }; c.visits.push(v); visitCount++; }
+      const hrs = legacyFmtHours(e.hours);
+      const text = String(e.description || '').trim();
+      v.notes.push(text ? (hrs ? `${text} — ${hrs}` : text) : (hrs ? `Work logged — ${hrs}` : '—'));
+    }
+    for (const name of order) for (const v of clients[name].visits) delete v._iso;
+
+    // Trips
+    const kms = (o.kmEntries || []).filter(e => inMonth(e) && e.staffId === staffId).slice()
+      .sort((a, b) => String(a.date).localeCompare(String(b.date)));
+    const trips = kms.map(k => {
+      getClient(k.clientId); // make sure the client is on the roster too
+      return { id: makeTripId(), date: legacyShortDate(k.date), client: clientById[k.clientId] || '',
+               timeOut: '', timeBack: '', odoStart: '', odoEnd: '', km: String(Number(k.km) || 0), notes: String(k.reason || '').trim() };
+    });
+
+    const state = JSON.parse(JSON.stringify(DEFAULT_STATE));
+    state.meta.consultant = staff.name || preferredName || '';
+    const [y, m] = monthKey.split('-').map(Number);
+    const first = new Date(y, m - 1, 1), lastDay = new Date(y, m, 0).getDate();
+    const monthName = first.toLocaleDateString('en-ZA', { month: 'long' });
+    state.meta.month = monthName; state.meta.year = String(y);
+    state.meta.period = `01 – ${String(lastDay).padStart(2, '0')} ${monthName} ${y}`;
+    state.clients = order.sort((a, b) => a.localeCompare(b)).map(n => clients[n]);
+    state.trips = trips;
+    state._month = monthKey;
+    return { state, note: `converted from Ubuntu Reports for ${staff.name}: ${entries.length} work entries → ${visitCount} visits, ${trips.length} km entries → trips` };
   }
 
   function exportJson() {
