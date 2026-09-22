@@ -1438,6 +1438,12 @@
     color: var(--ink);
     cursor: pointer;
   }
+  .month-picker-hint {
+    font-size: 10.5px;
+    color: rgba(255,255,255,0.45);
+    margin-top: 6px;
+    line-height: 1.35;
+  }
   .back-to-dashboard {
     width: calc(100% - 36px);
     margin: 0 18px 14px;
@@ -1778,6 +1784,7 @@
     <div class="month-picker-wrap" id="monthPickerWrap">
       <label class="month-picker-label">Reporting month</label>
       <select id="monthPicker" class="month-picker"></select>
+      <div class="month-picker-hint">Past months are kept — pick one to view or recover it.</div>
     </div>
 
     <!-- Admin "Back to dashboard" — only shown when an admin is viewing a consultant -->
@@ -1842,8 +1849,8 @@
 <!-- Sticky action bar -->
 <div class="action-bar">
   <div class="info" id="actionInfo"></div>
-  <button class="btn-secondary btn-sm" id="clearMonthBtn" title="Clear this month's visits, journeys and summaries — keeps your client list and consultant details">Clear monthly data</button>
-  <button class="btn-secondary btn-sm" id="resetBtn">Reset to blank template</button>
+  <button class="btn-secondary btn-sm hidden admin-only" id="clearMonthBtn" title="Admin only: clear this month's visits, journeys and summaries — keeps the client list and consultant details">Clear monthly data</button>
+  <button class="btn-secondary btn-sm hidden admin-only" id="resetBtn" title="Admin only: wipe this month completely, including the client list">Reset to blank template</button>
   <button class="btn-primary" id="generateBtn">Generate Word Report</button>
 </div>
 
@@ -2777,6 +2784,26 @@
       // Online / offline
       window.addEventListener('online',  () => { setStatus(currentUser ? 'syncing' : 'signed-out'); if (currentUser) pull(); });
       window.addEventListener('offline', () => setStatus('offline'));
+
+      // Month rollover while the tab stays open: when the calendar month
+      // changes, a consultant sitting on the old "current" month is moved to
+      // the new month (their last edit is flushed first; the old month is
+      // untouched and stays in history).
+      let monthAtLoad = currentMonthKey();
+      const checkRollover = async () => {
+        const now = currentMonthKey();
+        if (now === monthAtLoad) return;
+        const prev = monthAtLoad;
+        monthAtLoad = now;
+        if (!currentUser || isAdmin) return;          // admins navigate months themselves
+        if (currentMonth !== prev) return;              // consultant was already looking at another month
+        await switchMonth(now);
+        const label = (k) => new Date(Number(k.slice(0, 4)), Number(k.slice(5, 7)) - 1, 1).toLocaleDateString('en-ZA', { month: 'long', year: 'numeric' });
+        toast(`A new month has started — you're now on ${label(now)}. ${label(prev)} is kept under Reporting month.`);
+      };
+      document.addEventListener('visibilitychange', () => { if (!document.hidden) checkRollover(); });
+      window.addEventListener('focus', checkRollover);
+      setInterval(checkRollover, 5 * 60 * 1000);
     }
 
     // ----- Authentication -----
@@ -2869,6 +2896,7 @@
         currentUser = null;
         isAdmin = false;
         viewingEmail = null;
+        document.querySelectorAll('.admin-only').forEach(el => el.classList.add('hidden'));
         setStatus('signed-out');
         showSignInScreen();
         return;
@@ -2905,6 +2933,11 @@
 
       // Hide sign-in screen, show app
       hideSignInScreen();
+
+      // Destructive month tools are admin-only. Consultants never need them:
+      // every month is its own report, a new month opens blank automatically
+      // (with the client list carried over), and past months stay in history.
+      document.querySelectorAll('.admin-only').forEach(el => el.classList.toggle('hidden', !isAdmin));
 
       // Admins land on the admin dashboard. Consultants on their own current month.
       if (isAdmin) {
@@ -4088,8 +4121,9 @@
     return `
       <div class="help-banner">
         <strong>Welcome.</strong> Fill in <strong>Cover &amp; Stats</strong> with the consultant, region and month, then add your
-        clients via the <strong>+ Add Client</strong> button in the sidebar. Your client list carries over automatically every
-        month — only visits, journeys and summaries start fresh. Your work auto-saves continuously to the cloud.
+        clients via the <strong>+ Add Client</strong> button in the sidebar. Each month is stored separately: when a new month
+        starts you get a fresh report with your client list already in it, and every past month stays in the
+        <strong>Reporting month</strong> list for viewing or recovery. Your work auto-saves continuously to the cloud.
       </div>
 
       <div class="card">
@@ -7480,17 +7514,40 @@
       const f = e.target.files[0];
       if (!f) return;
       const reader = new FileReader();
-      reader.onload = ev => {
+      reader.onload = async ev => {
         try {
-          const parsed = JSON.parse(ev.target.result);
-          if (!parsed.meta || !Array.isArray(parsed.clients)) throw new Error('Not a valid report file');
-          state = migrateState(parsed);
+          let text = String(ev.target.result || '');
+          if (text.charCodeAt(0) === 0xFEFF) text = text.slice(1); // strip BOM (Windows Notepad)
+          let parsed;
+          try { parsed = JSON.parse(text); }
+          catch (pe) { throw new Error('the file is not readable JSON (' + pe.message + '). Make sure you picked a .json backup, not the Word report.'); }
+          const found = unwrapReportJson(parsed);
+          if (!found) {
+            const keys = (parsed && typeof parsed === 'object') ? Object.keys(parsed).slice(0, 8).join(', ') : typeof parsed;
+            throw new Error('no report data found in this file. It contains: ' + (keys || 'nothing') + '. A valid backup has "meta" and "clients" at the top.');
+          }
+          const incoming = migrateState(found.state);
+          const clients = (incoming.clients || []).length;
+          const visits  = (incoming.clients || []).reduce((a, c) => a + (c.visits || []).length, 0);
+          const monthKey = CloudSync.getCurrentMonth();
+          const monthName = monthKey ? new Date(Number(monthKey.slice(0, 4)), Number(monthKey.slice(5, 7)) - 1, 1).toLocaleDateString('en-ZA', { month: 'long', year: 'numeric' }) : 'this month';
+          const ok = await confirmDialog(
+            'Load this backup?',
+            `Replace everything currently shown for ${monthName} with the backup file (${clients} client${clients === 1 ? '' : 's'}, ${visits} visit${visits === 1 ? '' : 's'}` +
+            (found.note ? `, ${found.note}` : '') + `)?\n\nYour current data is backed up first, so this can be undone from the Storage panel.`
+          );
+          if (!ok) return;
+          await saveSnapshot(state);
+          try { CloudSync.queueSnapshot(state); await CloudSync.flushSnapshot(); } catch (e2) {}
+          incoming._month = monthKey || incoming._month;
+          incoming._owner = CloudSync.getViewingEmail() || incoming._owner;
+          state = incoming;
           currentView = { type: 'meta' };
           save();
           renderSidebar();
           renderContent();
           closeStorageModal();
-          toast('Imported successfully');
+          toast('Backup loaded');
         } catch (err) {
           toast('Import failed: ' + err.message, true);
         }
@@ -7498,6 +7555,38 @@
       reader.readAsText(f);
       e.target.value = '';
     });
+  }
+
+  // Accept the different JSON shapes a user might reasonably hand us:
+  //  - a plain report export            { meta, clients, ... }
+  //  - a daily snapshot                 { date, timestamp, data: { meta, clients } }
+  //  - a Firestore console export       { fields: ... } is NOT supported, but
+  //    a wrapper with the report under a single key (e.g. { report: {...} },
+  //    { state: {...} }, { ubuntu_msr_v3: {...} }) is searched one level deep.
+  //  - the very old Drive-sync export   same as plain, sometimes with 'stats'
+  //    at the top instead of inside meta.
+  function looksLikeReport(o) {
+    return !!(o && typeof o === 'object' && !Array.isArray(o) && o.meta && typeof o.meta === 'object' && Array.isArray(o.clients));
+  }
+  function unwrapReportJson(parsed) {
+    if (looksLikeReport(parsed)) return { state: parsed, note: '' };
+    if (parsed && typeof parsed === 'object') {
+      if (looksLikeReport(parsed.data)) return { state: parsed.data, note: 'from a daily backup' + (parsed.date ? ' dated ' + parsed.date : '') };
+      for (const k of Object.keys(parsed)) {
+        const v = parsed[k];
+        if (looksLikeReport(v)) return { state: v, note: 'found under "' + k + '"' };
+        if (v && typeof v === 'object' && looksLikeReport(v.data)) return { state: v.data, note: 'from a daily backup under "' + k + '"' };
+        // A string that itself contains JSON (e.g. a localStorage dump)
+        if (typeof v === 'string' && v.trim().startsWith('{')) {
+          try { const inner = JSON.parse(v); if (looksLikeReport(inner)) return { state: inner, note: 'found under "' + k + '"' }; } catch (e) {}
+        }
+      }
+      // Bare clients list with no meta — still usable
+      if (Array.isArray(parsed.clients) && !parsed.meta) {
+        return { state: Object.assign({ meta: JSON.parse(JSON.stringify(DEFAULT_STATE.meta)) }, parsed), note: 'no cover details in file' };
+      }
+    }
+    return null;
   }
 
   function exportJson() {
