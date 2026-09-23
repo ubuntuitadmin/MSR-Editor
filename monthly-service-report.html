@@ -348,6 +348,24 @@
     color: var(--muted);
     text-align: center;
   }
+  .visit-hours {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-top: 8px;
+  }
+  .visit-hours input {
+    width: 64px;
+    text-align: right;
+    font-family: 'JetBrains Mono', monospace;
+    padding: 6px 8px;
+  }
+  .visit-hours span {
+    font-size: 11px;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+  }
 
   .add-visit-btn {
     width: 100%;
@@ -2081,25 +2099,25 @@
     // Initialise from main clients (so all show even with zero activity)
     for (const c of state.clients) {
       if (!c.name) continue;
-      stats[c.name] = { name: c.name, visits: (c.visits || []).length, ccma: 0, bc: 0, journeys: 0, km: 0, mins: 0, isMain: true };
+      stats[c.name] = { name: c.name, visits: (c.visits || []).length, hours: clientHours(c), ccma: 0, bc: 0, journeys: 0, km: 0, mins: 0, isMain: true };
     }
     // Other clients (only included if they have activity)
     for (const o of (state.otherClients || [])) {
-      if (o.client && !stats[o.client]) stats[o.client] = { name: o.client, visits: 0, ccma: 0, bc: 0, journeys: 0, km: 0, mins: 0, isMain: false };
+      if (o.client && !stats[o.client]) stats[o.client] = { name: o.client, visits: 0, hours: 0, ccma: 0, bc: 0, journeys: 0, km: 0, mins: 0, isMain: false };
     }
 
     // Count CCMA appearances per client (one per entry, regardless of venue)
     for (const e of allCcmaEntries()) {
       const name = (e.client || '').trim();
       if (!name) continue;
-      if (!stats[name]) stats[name] = { name, visits: 0, ccma: 0, bc: 0, journeys: 0, km: 0, mins: 0, isMain: false };
+      if (!stats[name]) stats[name] = { name, visits: 0, hours: 0, ccma: 0, bc: 0, journeys: 0, km: 0, mins: 0, isMain: false };
       stats[name].ccma++;
     }
     // Count Bargaining Council attendances per client
     for (const e of allBargainingEntries()) {
       const name = (e.client || '').trim();
       if (!name) continue;
-      if (!stats[name]) stats[name] = { name, visits: 0, ccma: 0, bc: 0, journeys: 0, km: 0, mins: 0, isMain: false };
+      if (!stats[name]) stats[name] = { name, visits: 0, hours: 0, ccma: 0, bc: 0, journeys: 0, km: 0, mins: 0, isMain: false };
       stats[name].bc++;
     }
 
@@ -2110,7 +2128,7 @@
       const dur = (typeof tripDuration === 'function') ? tripDuration(j) : null;
       const mins = (dur === null) ? 0 : dur;
       if (name && knownClientNames.has(name)) {
-        if (!stats[name]) stats[name] = { name, visits: 0, ccma: 0, bc: 0, journeys: 0, km: 0, mins: 0, isMain: false };
+        if (!stats[name]) stats[name] = { name, visits: 0, hours: 0, ccma: 0, bc: 0, journeys: 0, km: 0, mins: 0, isMain: false };
         stats[name].journeys++;
         stats[name].km += km;
         stats[name].mins += mins;
@@ -2122,17 +2140,18 @@
     }
 
     const list = Object.values(stats)
-      .filter(s => s.visits > 0 || s.ccma > 0 || s.bc > 0 || s.journeys > 0)
+      .filter(s => s.visits > 0 || s.hours > 0 || s.ccma > 0 || s.bc > 0 || s.journeys > 0)
       .sort((a, b) => a.name.localeCompare(b.name));
 
     const totals = list.reduce((acc, s) => ({
       visits: acc.visits + s.visits,
+      hours: acc.hours + (s.hours || 0),
       ccma: acc.ccma + s.ccma,
       bc: acc.bc + s.bc,
       journeys: acc.journeys + s.journeys,
       km: acc.km + s.km,
       mins: acc.mins + s.mins,
-    }), { visits: 0, ccma: 0, bc: 0, journeys: 0, km: 0, mins: 0 });
+    }), { visits: 0, hours: 0, ccma: 0, bc: 0, journeys: 0, km: 0, mins: 0 });
 
     return { perClient: list, nonClient: { km: nonClientKm, mins: nonClientMins, journeys: nonClientCount }, totals };
   }
@@ -3704,6 +3723,18 @@
     return (a || []).join('\n');
   }
 
+  // Hours logged on a visit ("1.5", "2", "" → number)
+  function visitHours(v) {
+    const n = parseFloat(String((v && v.hours) ?? '').replace(',', '.'));
+    return isFinite(n) && n > 0 ? n : 0;
+  }
+  function clientHours(cli) { return (cli.visits || []).reduce((a, v) => a + visitHours(v), 0); }
+  function fmtHours(h) {
+    if (!h) return '—';
+    const r = Math.round(h * 100) / 100;
+    return (Number.isInteger(r) ? String(r) : String(r)) + 'h';
+  }
+
   // Auto-derive "Dates Visited" string from visits array
   function computeDatesVisited(visits) {
     return (visits || [])
@@ -4219,6 +4250,7 @@
               <tr>
                 <th>Client</th>
                 <th class="center">Visits</th>
+                <th class="center">Hours</th>
                 <th class="center">CCMA</th>
                 <th class="center">BC</th>
                 <th class="center">Journeys</th>
@@ -4231,6 +4263,7 @@
                 <tr>
                   <td class="client-name">${escapeHtml(s.name)}</td>
                   <td class="center">${s.visits || '<span class="empty-cell">—</span>'}</td>
+                  <td class="center">${s.hours > 0 ? fmtHours(s.hours) : '<span class="empty-cell">—</span>'}</td>
                   <td class="center">${(s.ccma || 0) || '<span class="empty-cell">—</span>'}</td>
                   <td class="center">${(s.bc || 0) || '<span class="empty-cell">—</span>'}</td>
                   <td class="center">${s.journeys || '<span class="empty-cell">—</span>'}</td>
@@ -4244,6 +4277,7 @@
                   <td class="center"><span class="empty-cell">—</span></td>
                   <td class="center"><span class="empty-cell">—</span></td>
                   <td class="center"><span class="empty-cell">—</span></td>
+                  <td class="center"><span class="empty-cell">—</span></td>
                   <td class="center">${stats.nonClient.journeys}</td>
                   <td class="num">${stats.nonClient.km.toLocaleString('en-ZA', { maximumFractionDigits: 1 })}</td>
                   <td class="center">${stats.nonClient.mins > 0 ? fmtDuration(stats.nonClient.mins) : '—'}</td>
@@ -4254,6 +4288,7 @@
               <tr>
                 <th>Total</th>
                 <td class="center">${stats.totals.visits}</td>
+                <td class="center">${fmtHours(stats.totals.hours)}</td>
                 <td class="center">${stats.totals.ccma}</td>
                 <td class="center">${stats.totals.bc}</td>
                 <td class="center">${stats.totals.journeys + stats.nonClient.journeys}</td>
@@ -4277,6 +4312,7 @@
       all.push({
         name: 'Non-client journeys',
         visits: 0,
+        hours: 0,
         journeys: stats.nonClient.journeys,
         km: stats.nonClient.km,
         mins: stats.nonClient.mins,
@@ -4318,6 +4354,7 @@
     const grandKm = stats.totals.km + stats.nonClient.km;
     const grandMins = stats.totals.mins + stats.nonClient.mins;
     const grandVisits = stats.totals.visits;
+    const grandHours = stats.totals.hours;
     const grandCcma = stats.totals.ccma;
     const grandBc = stats.totals.bc;
     const grandJourneys = stats.totals.journeys + stats.nonClient.journeys;
@@ -4344,6 +4381,11 @@
           <div class="label">Physical Visits</div>
           <div class="value">${grandVisits}</div>
           <div class="sub">on-site client visits</div>
+        </div>
+        <div class="activity-stat">
+          <div class="label">Hours on Visits</div>
+          <div class="value">${grandHours > 0 ? fmtHours(grandHours) : '—'}</div>
+          <div class="sub">logged against clients</div>
         </div>
         <div class="activity-stat">
           <div class="label">CCMA Appearances</div>
@@ -4381,6 +4423,7 @@
               <tr>
                 <th data-sort="name" class="${cls('name')}">Client ${sortArrow('name')}</th>
                 <th data-sort="visits" class="center ${cls('visits')}" style="text-align:center;">Visits ${sortArrow('visits')}</th>
+                <th data-sort="hours" class="center ${cls('hours')}" style="text-align:center;">Hours ${sortArrow('hours')}</th>
                 <th data-sort="ccma" class="center ${cls('ccma')}" style="text-align:center;">CCMA ${sortArrow('ccma')}</th>
                 <th data-sort="bc" class="center ${cls('bc')}" style="text-align:center;">BC ${sortArrow('bc')}</th>
                 <th data-sort="journeys" class="center ${cls('journeys')}" style="text-align:center;">Journeys ${sortArrow('journeys')}</th>
@@ -4401,6 +4444,10 @@
                     <td class="center ${isBarCol('visits') ? 'bar-cell' : ''}">
                       ${isBarCol('visits') ? `<span class="bar-fill" style="width:${pct}%"></span>` : ''}
                       ${s.visits > 0 ? s.visits : '<span class="empty-cell">—</span>'}
+                    </td>
+                    <td class="center ${isBarCol('hours') ? 'bar-cell' : ''}">
+                      ${isBarCol('hours') ? `<span class="bar-fill" style="width:${pct}%"></span>` : ''}
+                      ${(s.hours || 0) > 0 ? fmtHours(s.hours) : '<span class="empty-cell">—</span>'}
                     </td>
                     <td class="center ${isBarCol('ccma') ? 'bar-cell' : ''}">
                       ${isBarCol('ccma') ? `<span class="bar-fill" style="width:${pct}%"></span>` : ''}
@@ -4430,6 +4477,7 @@
               <tr>
                 <th>Total</th>
                 <td class="center">${grandVisits}</td>
+                <td class="center">${fmtHours(grandHours)}</td>
                 <td class="center">${grandCcma}</td>
                 <td class="center">${grandBc}</td>
                 <td class="center">${grandJourneys}</td>
@@ -4528,7 +4576,7 @@
       <div class="card">
         <div class="card-header">
           <div class="card-title" style="font-size:20px;">Visits</div>
-          <div class="card-subtitle">${(cli.visits || []).length} visit${(cli.visits || []).length === 1 ? '' : 's'}</div>
+          <div class="card-subtitle">${(cli.visits || []).length} visit${(cli.visits || []).length === 1 ? '' : 's'} · <span id="visitHoursTotal">${fmtHours(clientHours(cli))}</span> total</div>
         </div>
 
         <div class="dates-preview">
@@ -4542,6 +4590,10 @@
               <div>
                 <div class="visit-num">VISIT ${vi + 1}</div>
                 <input type="text" data-visit-field="date" placeholder="e.g. 6 Mar" value="${escapeHtml(v.date)}" />
+                <div class="visit-hours">
+                  <input type="text" data-visit-field="hours" inputmode="decimal" placeholder="0" value="${escapeHtml(v.hours ?? '')}" title="Hours spent on this visit" />
+                  <span>hours</span>
+                </div>
               </div>
               <div>
                 <textarea data-visit-field="notes" rows="3"
@@ -4625,6 +4677,11 @@
         cli.visits[vi].notes = linesToArray(e.target.value);
         save();
       });
+      row.querySelector('[data-visit-field="hours"]').addEventListener('input', e => {
+        cli.visits[vi].hours = e.target.value.trim();
+        updateVisitHoursTotal();
+        save();
+      });
       row.querySelectorAll('[data-visit-action]').forEach(btn => {
         btn.addEventListener('click', async e => {
           const act = btn.dataset.visitAction;
@@ -4646,7 +4703,7 @@
 
     document.getElementById('addVisitBtn').addEventListener('click', () => {
       cli.visits = cli.visits || [];
-      cli.visits.push({ date: '', notes: [] });
+      cli.visits.push({ date: '', hours: '', notes: [] });
       save();
       renderContent();
       renderSidebar();
@@ -4667,6 +4724,12 @@
       renderContent();
       toast('Client deleted');
     });
+  }
+
+  function updateVisitHoursTotal() {
+    const el = document.getElementById('visitHoursTotal');
+    const cli = state.clients[currentView.clientIdx];
+    if (el && cli) el.textContent = fmtHours(clientHours(cli));
   }
 
   function renderOtherView() {
@@ -5862,16 +5925,17 @@
     // Client index
     const clientIndexTable = new Table({
       width: { size: 9360, type: WidthType.DXA },
-      columnWidths: [600, 3360, 1300, 1700, 2400],
+      columnWidths: [600, 2960, 1000, 1000, 1500, 2300],
       rows: [
         new TableRow({
           tableHeader: true,
           children: [
             headerCell("#", 600),
-            headerCell("Client", 3360),
-            headerCell("Visits", 1300),
-            headerCell("Head Count", 1700),
-            headerCell("Payroll", 2400),
+            headerCell("Client", 2960),
+            headerCell("Visits", 1000),
+            headerCell("Hours", 1000),
+            headerCell("Head Count", 1500),
+            headerCell("Payroll", 2300),
           ],
         }),
         ...state.clients.map((c, i) => new TableRow({
@@ -5881,19 +5945,23 @@
               shading: i % 2 ? { fill: ROW_ALT, type: ShadingType.CLEAR, color: "auto" } : undefined,
               margins: { top: 60, bottom: 60, left: 140, right: 140 }, verticalAlign: VerticalAlign.CENTER,
               children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: String(i + 1).padStart(2, '0'), color: MUTED, size: 18, font: "Calibri" })] })] }),
-            new TableCell({ borders: cellBorders, width: { size: 3360, type: WidthType.DXA },
+            new TableCell({ borders: cellBorders, width: { size: 2960, type: WidthType.DXA },
               shading: i % 2 ? { fill: ROW_ALT, type: ShadingType.CLEAR, color: "auto" } : undefined,
               margins: { top: 60, bottom: 60, left: 140, right: 140 }, verticalAlign: VerticalAlign.CENTER,
               children: [new Paragraph({ children: [new TextRun({ text: c.name, bold: true, color: NAVY, size: 20, font: "Calibri" })] })] }),
-            new TableCell({ borders: cellBorders, width: { size: 1300, type: WidthType.DXA },
+            new TableCell({ borders: cellBorders, width: { size: 1000, type: WidthType.DXA },
               shading: i % 2 ? { fill: ROW_ALT, type: ShadingType.CLEAR, color: "auto" } : undefined,
               margins: { top: 60, bottom: 60, left: 140, right: 140 }, verticalAlign: VerticalAlign.CENTER,
               children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: String((c.visits || []).length), color: "1F2937", size: 20, font: "Calibri" })] })] }),
-            new TableCell({ borders: cellBorders, width: { size: 1700, type: WidthType.DXA },
+            new TableCell({ borders: cellBorders, width: { size: 1000, type: WidthType.DXA },
+              shading: i % 2 ? { fill: ROW_ALT, type: ShadingType.CLEAR, color: "auto" } : undefined,
+              margins: { top: 60, bottom: 60, left: 140, right: 140 }, verticalAlign: VerticalAlign.CENTER,
+              children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: clientHours(c) > 0 ? fmtHours(clientHours(c)) : "—", color: "1F2937", size: 20, font: "Calibri" })] })] }),
+            new TableCell({ borders: cellBorders, width: { size: 1500, type: WidthType.DXA },
               shading: i % 2 ? { fill: ROW_ALT, type: ShadingType.CLEAR, color: "auto" } : undefined,
               margins: { top: 60, bottom: 60, left: 140, right: 140 }, verticalAlign: VerticalAlign.CENTER,
               children: [new Paragraph({ children: [new TextRun({ text: c.headCount, color: "1F2937", size: 20, font: "Calibri" })] })] }),
-            new TableCell({ borders: cellBorders, width: { size: 2400, type: WidthType.DXA },
+            new TableCell({ borders: cellBorders, width: { size: 2300, type: WidthType.DXA },
               shading: i % 2 ? { fill: ROW_ALT, type: ShadingType.CLEAR, color: "auto" } : undefined,
               margins: { top: 60, bottom: 60, left: 140, right: 140 }, verticalAlign: VerticalAlign.CENTER,
               children: [new Paragraph({ children: [new TextRun({ text: c.frequency, color: "1F2937", size: 20, font: "Calibri" })] })] }),
@@ -5930,6 +5998,12 @@
             children: [new Paragraph({ children: [new TextRun({ text: computeDatesVisited(cli.visits) || "—", color: "1F2937", size: 20, font: "Calibri" })] })],
           }),
         ]}),
+        new TableRow({ cantSplit: true, children: [
+          bodyCell("Hours this month", 1700, { fill: ROW_ALT, bold: true, color: NAVY }),
+          bodyCell(clientHours(cli) > 0 ? fmtHours(clientHours(cli)) : "—", 2980),
+          bodyCell("Visits", 1700, { fill: ROW_ALT, bold: true, color: NAVY }),
+          bodyCell(String((cli.visits || []).length), 2980),
+        ]}),
       ],
     });
 
@@ -5943,11 +6017,11 @@
       }
       return new Table({
         width: { size: 9360, type: WidthType.DXA },
-        columnWidths: [1300, 8060],
+        columnWidths: [1300, 900, 7160],
         rows: [
           new TableRow({
             tableHeader: true,
-            children: [headerCell("Date", 1300), headerCell("Visit Notes", 8060)],
+            children: [headerCell("Date", 1300), headerCell("Hours", 900), headerCell("Visit Notes", 7160)],
           }),
           ...visits.map((v, i) => {
             const fill = i % 2 ? ROW_ALT : undefined;
@@ -5972,7 +6046,15 @@
                 }),
                 new TableCell({
                   borders: cellBorders,
-                  width: { size: 8060, type: WidthType.DXA },
+                  width: { size: 900, type: WidthType.DXA },
+                  shading: fill ? { fill, type: ShadingType.CLEAR, color: "auto" } : undefined,
+                  margins: { top: 120, bottom: 120, left: 100, right: 100 },
+                  verticalAlign: VerticalAlign.TOP,
+                  children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: visitHours(v) > 0 ? fmtHours(visitHours(v)) : "—", color: "1F2937", size: 20, font: "Calibri" })] })],
+                }),
+                new TableCell({
+                  borders: cellBorders,
+                  width: { size: 7160, type: WidthType.DXA },
                   shading: fill ? { fill, type: ShadingType.CLEAR, color: "auto" } : undefined,
                   margins: { top: 120, bottom: 120, left: 140, right: 140 },
                   verticalAlign: VerticalAlign.TOP,
@@ -6298,18 +6380,19 @@
 
       const summaryTable = new Table({
         width: { size: 9360, type: WidthType.DXA },
-        columnWidths: [2700, 900, 900, 900, 1100, 1300, 1560],
+        columnWidths: [2200, 800, 900, 800, 800, 1160, 1300, 1400],
         rows: [
           new TableRow({
             tableHeader: true,
             children: [
-              headerCell("Client", 2700),
-              headerCell("Visits", 900),
-              headerCell("CCMA", 900),
-              headerCell("BC", 900),
-              headerCell("Journeys", 1100),
+              headerCell("Client", 2200),
+              headerCell("Visits", 800),
+              headerCell("Hours", 900),
+              headerCell("CCMA", 800),
+              headerCell("BC", 800),
+              headerCell("Journeys", 1160),
               headerCell("Total KM", 1300),
-              headerCell("Total Time", 1560),
+              headerCell("Total Time", 1400),
             ],
           }),
           ...rows.map((s, i) => {
@@ -6317,39 +6400,42 @@
             return new TableRow({
               cantSplit: true,
               children: [
-                bodyCell(s.name, 2700, { fill, bold: true, color: NAVY, valign: VerticalAlign.TOP }),
-                bodyCell(s.visits ? String(s.visits) : "—", 900, { fill, align: AlignmentType.CENTER, valign: VerticalAlign.TOP }),
-                bodyCell((s.ccma || 0) ? String(s.ccma) : "—", 900, { fill, align: AlignmentType.CENTER, valign: VerticalAlign.TOP }),
-                bodyCell((s.bc || 0) ? String(s.bc) : "—", 900, { fill, align: AlignmentType.CENTER, valign: VerticalAlign.TOP }),
-                bodyCell(s.journeys ? String(s.journeys) : "—", 1100, { fill, align: AlignmentType.CENTER, valign: VerticalAlign.TOP }),
+                bodyCell(s.name, 2200, { fill, bold: true, color: NAVY, valign: VerticalAlign.TOP }),
+                bodyCell(s.visits ? String(s.visits) : "—", 800, { fill, align: AlignmentType.CENTER, valign: VerticalAlign.TOP }),
+                bodyCell((s.hours || 0) > 0 ? fmtHours(s.hours) : "—", 900, { fill, align: AlignmentType.CENTER, valign: VerticalAlign.TOP }),
+                bodyCell((s.ccma || 0) ? String(s.ccma) : "—", 800, { fill, align: AlignmentType.CENTER, valign: VerticalAlign.TOP }),
+                bodyCell((s.bc || 0) ? String(s.bc) : "—", 800, { fill, align: AlignmentType.CENTER, valign: VerticalAlign.TOP }),
+                bodyCell(s.journeys ? String(s.journeys) : "—", 1160, { fill, align: AlignmentType.CENTER, valign: VerticalAlign.TOP }),
                 bodyCell(s.km > 0 ? s.km.toLocaleString('en-ZA', { maximumFractionDigits: 1 }) : "—", 1300, { fill, align: AlignmentType.RIGHT, valign: VerticalAlign.TOP, bold: s.km > 0 }),
-                bodyCell(s.mins > 0 ? fmtDuration(s.mins) : "—", 1560, { fill, align: AlignmentType.CENTER, valign: VerticalAlign.TOP }),
+                bodyCell(s.mins > 0 ? fmtDuration(s.mins) : "—", 1400, { fill, align: AlignmentType.CENTER, valign: VerticalAlign.TOP }),
               ],
             });
           }),
           ...(nc.journeys > 0 ? [new TableRow({
             cantSplit: true,
             children: [
-              bodyCell("Non-client journeys", 2700, { fill: rows.length % 2 ? ROW_ALT : undefined, italic: true, color: MUTED, valign: VerticalAlign.TOP }),
+              bodyCell("Non-client journeys", 2200, { fill: rows.length % 2 ? ROW_ALT : undefined, italic: true, color: MUTED, valign: VerticalAlign.TOP }),
+              bodyCell("—", 800, { fill: rows.length % 2 ? ROW_ALT : undefined, align: AlignmentType.CENTER }),
               bodyCell("—", 900, { fill: rows.length % 2 ? ROW_ALT : undefined, align: AlignmentType.CENTER }),
-              bodyCell("—", 900, { fill: rows.length % 2 ? ROW_ALT : undefined, align: AlignmentType.CENTER }),
-              bodyCell("—", 900, { fill: rows.length % 2 ? ROW_ALT : undefined, align: AlignmentType.CENTER }),
-              bodyCell(String(nc.journeys), 1100, { fill: rows.length % 2 ? ROW_ALT : undefined, align: AlignmentType.CENTER }),
+              bodyCell("—", 800, { fill: rows.length % 2 ? ROW_ALT : undefined, align: AlignmentType.CENTER }),
+              bodyCell("—", 800, { fill: rows.length % 2 ? ROW_ALT : undefined, align: AlignmentType.CENTER }),
+              bodyCell(String(nc.journeys), 1160, { fill: rows.length % 2 ? ROW_ALT : undefined, align: AlignmentType.CENTER }),
               bodyCell(nc.km.toLocaleString('en-ZA', { maximumFractionDigits: 1 }), 1300, { fill: rows.length % 2 ? ROW_ALT : undefined, align: AlignmentType.RIGHT, bold: true }),
-              bodyCell(nc.mins > 0 ? fmtDuration(nc.mins) : "—", 1560, { fill: rows.length % 2 ? ROW_ALT : undefined, align: AlignmentType.CENTER }),
+              bodyCell(nc.mins > 0 ? fmtDuration(nc.mins) : "—", 1400, { fill: rows.length % 2 ? ROW_ALT : undefined, align: AlignmentType.CENTER }),
             ],
           })] : []),
           // Grand total row
           new TableRow({
             cantSplit: true,
             children: [
-              bodyCell("Total", 2700, { fill: NAVY_DARK, color: "FFFFFF", bold: true }),
-              bodyCell(String(tt.visits), 900, { fill: NAVY_DARK, color: "FFFFFF", bold: true, align: AlignmentType.CENTER }),
-              bodyCell(String(tt.ccma || 0), 900, { fill: NAVY_DARK, color: "FFFFFF", bold: true, align: AlignmentType.CENTER }),
-              bodyCell(String(tt.bc || 0), 900, { fill: NAVY_DARK, color: "FFFFFF", bold: true, align: AlignmentType.CENTER }),
-              bodyCell(String(grandJourneys), 1100, { fill: NAVY_DARK, color: "FFFFFF", bold: true, align: AlignmentType.CENTER }),
+              bodyCell("Total", 2200, { fill: NAVY_DARK, color: "FFFFFF", bold: true }),
+              bodyCell(String(tt.visits), 800, { fill: NAVY_DARK, color: "FFFFFF", bold: true, align: AlignmentType.CENTER }),
+              bodyCell((tt.hours || 0) > 0 ? fmtHours(tt.hours) : "—", 900, { fill: NAVY_DARK, color: "FFFFFF", bold: true, align: AlignmentType.CENTER }),
+              bodyCell(String(tt.ccma || 0), 800, { fill: NAVY_DARK, color: "FFFFFF", bold: true, align: AlignmentType.CENTER }),
+              bodyCell(String(tt.bc || 0), 800, { fill: NAVY_DARK, color: "FFFFFF", bold: true, align: AlignmentType.CENTER }),
+              bodyCell(String(grandJourneys), 1160, { fill: NAVY_DARK, color: "FFFFFF", bold: true, align: AlignmentType.CENTER }),
               bodyCell(grandKm.toLocaleString('en-ZA', { maximumFractionDigits: 1 }), 1300, { fill: NAVY_DARK, color: "FFFFFF", bold: true, align: AlignmentType.RIGHT }),
-              bodyCell(fmtDuration(grandMins), 1560, { fill: NAVY_DARK, color: "FFFFFF", bold: true, align: AlignmentType.CENTER }),
+              bodyCell(fmtDuration(grandMins), 1400, { fill: NAVY_DARK, color: "FFFFFF", bold: true, align: AlignmentType.CENTER }),
             ],
           }),
         ],
@@ -6357,7 +6443,7 @@
 
       children.push(
         sectionHeading("Client Time & Distance Summary"),
-        p('Per-client breakdown of visits, journeys, kilometres travelled, and time spent across the period. Journey totals include trips to the client as well as CCMA and bargaining council attendances on their behalf.', { color: SLATE, size: 20, spacing: { before: 0, after: 180 } }),
+        p('Per-client breakdown of visits, hours logged on visits, journeys, kilometres travelled, and travel time across the period. Journey totals include trips to the client as well as CCMA and bargaining council attendances on their behalf.', { color: SLATE, size: 20, spacing: { before: 0, after: 180 } }),
         summaryTable,
       );
     }
@@ -7601,7 +7687,7 @@
   //    kmEntries:[{staffId,clientId,date,km,reason}] }
   //  Converted one consultant + one reporting month at a time:
   //   entry    → a visit note on that client for that date (same client +
-  //              day merged into one visit; hours kept at the end of the note)
+  //              day merged into one visit; hours summed into the visit's Hours)
   //   kmEntry  → a Trip Log row (client, km, reason)
   //   clients  → the file's FULL client list (it is the consultant's
   //              permanent roster), whether or not they had activity
@@ -7669,12 +7755,16 @@
     for (const e of entries) {
       const c = getClient(e.clientId);
       let v = c.visits.find(x => x._iso === e.date);
-      if (!v) { v = { date: legacyShortDate(e.date), notes: [], _iso: e.date }; c.visits.push(v); visitCount++; }
-      const hrs = legacyFmtHours(e.hours);
+      if (!v) { v = { date: legacyShortDate(e.date), hours: 0, notes: [], _iso: e.date }; c.visits.push(v); visitCount++; }
+      const h = Number(e.hours); if (isFinite(h) && h > 0) v.hours += h;
       const text = String(e.description || '').trim();
-      v.notes.push(text ? (hrs ? `${text} — ${hrs}` : text) : (hrs ? `Work logged — ${hrs}` : '—'));
+      const lines = text.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+      if (lines.length) v.notes.push(...lines); else v.notes.push('—');
     }
-    for (const name of order) for (const v of clients[name].visits) delete v._iso;
+    for (const name of order) for (const v of clients[name].visits) {
+      delete v._iso;
+      v.hours = v.hours > 0 ? String(Math.round(v.hours * 100) / 100) : '';
+    }
 
     // Trips
     const kms = (o.kmEntries || []).filter(e => inMonth(e) && e.staffId === staffId).slice()
