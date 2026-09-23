@@ -2184,6 +2184,9 @@
     // Total physical visits across all main clients
     const physicalVisits = clients.reduce((acc, c) => acc + ((c.visits || []).length), 0);
 
+    // Hours logged across all visits
+    const totalHours = clients.reduce((acc, c) => acc + clientHours(c), 0);
+
     // Client Visits box = physical visits + CCMA appearances + BC appearances
     // (this is total client contact — each CCMA / BC matter is a contact event)
     const clientVisits = physicalVisits + ccmaCount + bcCount;
@@ -2220,6 +2223,7 @@
     return {
       clientsAssisted:      String(clientsAssisted),
       clientVisits:         String(clientVisits),
+      hoursLogged:          totalHours > 0 ? fmtHours(totalHours) : '0',
       kilometres:           km.toLocaleString('en-ZA', { maximumFractionDigits: 0 }) + ' km',
       ccmaAppearances:      String(ccmaCount),
       bcAppearances:        String(bcCount),
@@ -4205,6 +4209,7 @@
             const fields = [
               ['clientsAssisted',      'Clients Assisted'],
               ['clientVisits',         'Client Visits'],
+              ['hoursLogged',          'Hours Logged'],
               ['ccmaAppearances',      'CCMA Appearances'],
               ['bcAppearances',        'BC Appearances'],
               ['kilometres',           'Distance Travelled'],
@@ -4225,6 +4230,7 @@
         <p class="input-help" style="margin-top: 12px;">
           These values update automatically as you log visits, trips, CCMA / bargaining council attendances, and add or edit clients.
           <strong>Client Visits</strong> includes physical visits, CCMA appearances, and BC appearances combined.
+          <strong>Hours Logged</strong> is the sum of the hours entered on each visit.
           To make <strong>Outsourced</strong> / <strong>Payroll-Only</strong> / <strong>Employees</strong> counts work,
           set each client's <strong>Type</strong> field on its profile page.
         </p>
@@ -5866,9 +5872,9 @@
     });
 
     // Stats
-    const statCell = (value, label, fill) => new TableCell({
+    const statCell = (value, label, fill, width = 3120) => new TableCell({
       borders: cellBorders,
-      width: { size: 3120, type: WidthType.DXA },
+      width: { size: width, type: WidthType.DXA },
       shading: { fill, type: ShadingType.CLEAR, color: "auto" },
       margins: { top: 180, bottom: 180, left: 140, right: 140 },
       verticalAlign: VerticalAlign.CENTER,
@@ -5889,11 +5895,12 @@
     const s = computeCoverStats();
     const statsRow1 = new Table({
       width: { size: 9360, type: WidthType.DXA },
-      columnWidths: [3120, 3120, 3120],
+      columnWidths: [2340, 2340, 2340, 2340],
       rows: [new TableRow({ children: [
-        statCell(s.clientsAssisted, "CLIENTS ASSISTED", ROW_ALT),
-        statCell(s.clientVisits, "CLIENT VISITS", "FFFFFF"),
-        statCell(s.kilometres, "DISTANCE TRAVELLED", ROW_ALT),
+        statCell(s.clientsAssisted, "CLIENTS ASSISTED", ROW_ALT, 2340),
+        statCell(s.clientVisits, "CLIENT VISITS", "FFFFFF", 2340),
+        statCell(s.hoursLogged, "HOURS LOGGED", ROW_ALT, 2340),
+        statCell(s.kilometres, "DISTANCE TRAVELLED", "FFFFFF", 2340),
       ]})],
     });
     const statsRowCcmaBc = new Table({
