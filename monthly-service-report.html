@@ -7603,7 +7603,8 @@
   //   entry    → a visit note on that client for that date (same client +
   //              day merged into one visit; hours kept at the end of the note)
   //   kmEntry  → a Trip Log row (client, km, reason)
-  //   clients  → only those with activity in the month
+  //   clients  → the file's FULL client list (it is the consultant's
+  //              permanent roster), whether or not they had activity
   // ============================================================
   function isLegacyReportsExport(o) {
     return !!(o && typeof o === 'object' && Array.isArray(o.staff) && Array.isArray(o.entries) && Array.isArray(o.clients)
@@ -7644,8 +7645,15 @@
     }
     const staff = staffById[staffId];
 
-    // Build clients + visits
+    // Build clients + visits — start with the whole roster from the file
     const clients = {}; const order = [];
+    for (const c of o.clients) {
+      const name = String(c.name || '').trim();
+      if (!name || clients[name]) continue;
+      clients[name] = { name, contact: '', tel: '', headCount: '', frequency: '', type: '', visits: [],
+                        discipline: ['Not at this time.'], followup: ['Not at this time.'], admin: ['Not at this time.'], additional: ['Not at this time.'] };
+      order.push(name);
+    }
     const getClient = (cid) => {
       const name = clientById[cid] || 'Unknown client';
       if (!clients[name]) {
@@ -7687,7 +7695,7 @@
     state.clients = order.sort((a, b) => a.localeCompare(b)).map(n => clients[n]);
     state.trips = trips;
     state._month = monthKey;
-    return { state, note: `converted from Ubuntu Reports for ${staff.name}: ${entries.length} work entries → ${visitCount} visits, ${trips.length} km entries → trips` };
+    return { state, note: `converted from Ubuntu Reports for ${staff.name}: full client list of ${state.clients.length}, ${entries.length} work entries → ${visitCount} visits, ${trips.length} km entries → trips` };
   }
 
   function exportJson() {
