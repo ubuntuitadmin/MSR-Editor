@@ -5929,6 +5929,22 @@
       ]})],
     });
 
+    // Only clients with activity this month go into the Word report.
+    // "Activity" = at least one visit, or any Summary box that says
+    // something other than the default "Not at this time." placeholder.
+    // The full roster stays in the app for next month's carry-forward.
+    const isPlaceholder = (line) => /^(not at this time\.?|nothing to report\.?|n\/?a|none\.?|—|-)$/i.test(String(line || '').trim());
+    const clientHasActivity = (c) => {
+      if ((c.visits || []).length > 0) return true;
+      for (const k of ['discipline', 'followup', 'admin', 'additional']) {
+        const lines = (c[k] || []).map(l => String(l || '').trim()).filter(Boolean);
+        if (lines.some(l => !isPlaceholder(l))) return true;
+      }
+      return false;
+    };
+    const reportClients = state.clients.filter(clientHasActivity);
+    const skippedClients = state.clients.length - reportClients.length;
+
     // Client index
     const clientIndexTable = new Table({
       width: { size: 9360, type: WidthType.DXA },
@@ -5945,7 +5961,7 @@
             headerCell("Payroll", 2300),
           ],
         }),
-        ...state.clients.map((c, i) => new TableRow({
+        ...reportClients.map((c, i) => new TableRow({
           cantSplit: true,
           children: [
             new TableCell({ borders: cellBorders, width: { size: 600, type: WidthType.DXA },
@@ -6103,7 +6119,7 @@
       }),
     });
 
-    const allClientSections = state.clients.flatMap(cli => [
+    const allClientSections = reportClients.flatMap(cli => [
       clientHeading(cli.name),
       buildClientInfoTable(cli),
       subHeading("Visit Feedback"),
@@ -6162,9 +6178,16 @@
       statsRow2, spacer(100),
       statsRow3,
       sectionHeading("Client Index"),
-      clientIndexTable,
+      ...(reportClients.length === 0 ? [
+        p("No client activity was recorded this month.", { color: MUTED, italic: true, size: 20, spacing: { before: 60, after: 120 } }),
+      ] : [clientIndexTable]),
+      ...(skippedClients > 0 ? [
+        p(`${skippedClients} client${skippedClients === 1 ? '' : 's'} on the portfolio with no activity this month ${skippedClients === 1 ? 'is' : 'are'} not shown.`, { color: MUTED, italic: true, size: 18, spacing: { before: 80, after: 0 } }),
+      ] : []),
       sectionHeading("Client Reports"),
-      ...allClientSections,
+      ...(reportClients.length === 0 ? [
+        p("No client activity was recorded this month.", { color: MUTED, italic: true, size: 20, spacing: { before: 60, after: 120 } }),
+      ] : allClientSections),
     ];
 
     if (otherClientsTable) {
